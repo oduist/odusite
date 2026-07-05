@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.pyc
+
+# Node / Astro
+site/node_modules/
+site/dist/
+site/.astro/
+site/.wrangler/
+
+# Local secrets
+site/.dev.vars
+.env
