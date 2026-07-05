@@ -22,6 +22,7 @@ from odoo.addons.odusite_base.controllers.api import (
     odusite_route,
 )
 from odoo.addons.odusite_base.lib import jwt as jwt_lib
+from odoo.addons.odusite_portal.models.res_users import EMAIL_CONFIRM_TYP
 
 _logger = logging.getLogger(__name__)
 
@@ -84,6 +85,10 @@ class OdusiteAuthController(http.Controller):
             auth_info = request.env['res.users']._login(
                 credential, {'interactive': True})
         except AccessDenied:
+            # An unconfirmed b2c account is inactive, so _login rejects it here
+            # before checking the password. Surface the specific error (only to
+            # a caller who supplied the right password, to avoid enumeration).
+            self._raise_if_pending_confirmation(login, password)
             # Same message whether the login exists or not.
             raise ApiError(401, 'unauthorized', 'Invalid credentials')
         user = request.env['res.users'].sudo().browse(auth_info['uid'])
@@ -96,6 +101,39 @@ class OdusiteAuthController(http.Controller):
                 'Multi-factor authentication is enabled on this account and '
                 'is not supported by the site login yet.')
         return user
+
+    def _raise_if_pending_confirmation(self, login, password):
+        """Raise 403 ``email_not_confirmed`` for a b2c account that exists and
+        whose password is correct but whose email has not been confirmed yet
+        (and which is therefore still inactive).
+
+        Only surfaced to a caller who knows the password, so the endpoint does
+        not become an account-existence oracle.
+        """
+        Users = request.env['res.users'].sudo().with_context(active_test=False)
+        user = Users.search(Users._get_login_domain(login), limit=1)
+        if not user or user.active or user.odusite_email_confirmed \
+                or user._is_internal():
+            return
+        if not self._password_matches(user, password):
+            return
+        raise ApiError(
+            403, 'email_not_confirmed',
+            'Please confirm your email address before signing in.')
+
+    def _password_matches(self, user, password):
+        """Verify a password against a (possibly inactive) user, bypassing the
+        active filter that ``_login`` applies. Mirrors the credential check in
+        ``res.users._login`` (base/models/res_users.py)."""
+        if not isinstance(password, str) or not password:
+            return False
+        credential = {'login': user.login, 'password': password, 'type': 'password'}
+        try:
+            user.with_user(user).sudo()._check_credentials(
+                credential, {'interactive': True})
+        except AccessDenied:
+            return False
+        return True
 
     def _signup_token_info(self, token):
         """Resolve an auth_signup token to its partner info, or 400."""
@@ -189,11 +227,89 @@ class OdusiteAuthController(http.Controller):
                     {'fields': {'email': 'Already registered.'}})
             _logger.warning('Odusite signup failed: %s', exc)
             raise ApiError(400, 'bad_request', 'Could not create a new account.')
-        # Note: the stock b2c controller also sends
-        # auth_signup.mail_template_user_signup_account_created here; skipped
-        # in v1 because its links point to the Odoo backend (/web/login).
-        user = self._login_user(login, password)
+
+        Users = request.env['res.users'].sudo().with_context(active_test=False)
+        user = Users.search(Users._get_login_domain(login), limit=1)
+        if not user:
+            raise ApiError(400, 'bad_request', 'Could not create a new account.')
+
+        if token:
+            # Invited signup: the invitation implies an already-verified address.
+            # Confirm immediately, keep the account active and auto-log in
+            # (the stock b2c account-created email is skipped: its links point
+            # to the Odoo backend /web/login).
+            if not user.odusite_email_confirmed:
+                user.write({'odusite_email_confirmed': True})
+            user = self._login_user(login, password)
+            return self._auth_response(user)
+
+        # Fresh self-service (b2c) signup: enforce email double opt-in. The
+        # account is created inactive and unconfirmed; a tokenized confirmation
+        # link is emailed to the visitor, who must click it (POST /auth/confirm)
+        # before the account can be used. No tokens are returned (no auto-login).
+        user.write({'odusite_email_confirmed': False, 'active': False})
+        try:
+            user._odusite_send_confirmation_email()
+        except Exception:
+            _logger.warning(
+                'Odusite confirmation email failed to send', exc_info=True)
+        return {'status': 'confirmation_sent', 'email': user.email or user.login}
+
+    @odusite_route(f'{API_PREFIX}/auth/confirm', methods=['POST'])
+    def auth_confirm(self, token=None, **params):
+        """Confirm an email address from the double opt-in link.
+
+        Verifies the ``email_confirm`` JWT (signature, expiry, type), marks the
+        user confirmed + active and auto-logs in (same shape as /auth/login).
+        """
+        if not isinstance(token, str) or not token:
+            raise ApiError(400, 'bad_request', 'token is required.')
+        secret = get_param('odusite.jwt_secret')
+        if not secret:
+            raise ApiError(500, 'internal', 'JWT secret is not configured.')
+        try:
+            payload = jwt_lib.verify(token, secret)
+        except jwt_lib.ExpiredToken:
+            raise ApiError(401, 'token_expired', 'Confirmation link has expired.')
+        except jwt_lib.InvalidToken:
+            raise ApiError(400, 'invalid_token', 'Invalid confirmation link.')
+        if payload.get('typ') != EMAIL_CONFIRM_TYP:
+            raise ApiError(400, 'invalid_token', 'Invalid confirmation link.')
+        try:
+            uid = int(payload.get('sub', 0))
+        except (TypeError, ValueError):
+            raise ApiError(400, 'invalid_token', 'Invalid confirmation link.')
+        user = request.env['res.users'].sudo().with_context(
+            active_test=False).browse(uid).exists()
+        if not user:
+            raise ApiError(400, 'invalid_token', 'Invalid confirmation link.')
+        if not user.odusite_email_confirmed:
+            user.write({'odusite_email_confirmed': True, 'active': True})
+        if not user.active:
+            # Confirmed earlier but archived by an admin since — do not revive.
+            raise ApiError(400, 'invalid_token', 'Invalid confirmation link.')
         return self._auth_response(user)
+
+    @odusite_route(f'{API_PREFIX}/auth/confirm/resend', methods=['POST'])
+    def auth_confirm_resend(self, email=None, **params):
+        """Re-send the confirmation email for an unconfirmed account.
+
+        Always answers ``{ok: true}`` regardless of whether the account exists
+        or is already confirmed (no user enumeration).
+        """
+        if isinstance(email, str) and email.strip():
+            value = email.strip()
+            Users = request.env['res.users'].sudo().with_context(active_test=False)
+            user = Users.search(
+                ['|', ('login', '=', value), ('email', '=', value)], limit=1)
+            if user and not user.odusite_email_confirmed \
+                    and not user._is_internal():
+                try:
+                    user._odusite_send_confirmation_email()
+                except Exception:
+                    _logger.warning(
+                        'Odusite confirmation resend failed', exc_info=True)
+        return {'ok': True}
 
     @odusite_route(f'{API_PREFIX}/auth/password/forgot', methods=['POST'])
     def auth_password_forgot(self, login=None, **params):

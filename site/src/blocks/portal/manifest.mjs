@@ -20,11 +20,15 @@ const routes = [
   { pattern: '/reset/[token]', entrypoint: 'pages/reset-token.astro' },
   // Password-reset emails link to /portal/reset/<token> (specs/03-auth.md).
   { pattern: '/portal/reset/[token]', entrypoint: 'pages/reset-token.astro' },
+  // Signup-confirmation emails link to /confirm/<token> (specs/03-auth.md).
+  { pattern: '/confirm/[token]', entrypoint: 'pages/confirm/[token].astro' },
 
   // Auth endpoints (plain form POST targets)
   { pattern: '/api/auth/login', entrypoint: 'api/auth/login.ts' },
   { pattern: '/api/auth/logout', entrypoint: 'api/auth/logout.ts' },
   { pattern: '/api/auth/signup', entrypoint: 'api/auth/signup.ts' },
+  { pattern: '/api/auth/confirm', entrypoint: 'api/auth/confirm.ts' },
+  { pattern: '/api/auth/resend', entrypoint: 'api/auth/resend.ts' },
   { pattern: '/api/auth/forgot', entrypoint: 'api/auth/forgot.ts' },
   { pattern: '/api/auth/reset', entrypoint: 'api/auth/reset.ts' },
 

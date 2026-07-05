@@ -3,8 +3,9 @@
     'summary': 'Headless JWT authentication and portal core for the Odusite frontend',
     'description': """
 Odusite portal core (see specs/03-auth.md and specs/modules/odusite_portal.md):
-- JWT authentication: /odusite/v1/auth/* (login, refresh, logout, signup,
-  password forgot/reset), rotating refresh tokens stored hashed in Odoo
+- JWT authentication: /odusite/v1/auth/* (login, refresh, logout, signup with
+  email double opt-in, confirm/resend, password forgot/reset), rotating
+  refresh tokens stored hashed in Odoo
 - Portal profile: /odusite/v1/me (profile, password, addresses, counters,
   sessions)
 - Generic portal chatter: /odusite/v1/chatter/* (messages, attachments)
@@ -19,6 +20,7 @@ Odusite portal core (see specs/03-auth.md and specs/modules/odusite_portal.md):
         'security/ir.model.access.csv',
         'data/ir_cron.xml',
         'data/mail_template_data.xml',
+        'views/res_config_settings_views.xml',
     ],
     'installable': True,
 }

@@ -31,9 +31,17 @@ the requested language; the site sends `?lang=` on every API call.
 
 Portal users are managed the standard Odoo way (contact → *Grant portal
 access*). Invitation and password-reset emails link to the Astro site
-(`odusite.site_url`) instead of the Odoo login page. Self-registration on the
-site follows **Settings → General → Customer Account** (b2c enables free
-signup).
+(`odusite.site_url`) instead of the Odoo login page.
+
+**Public sign up** is toggled under **Settings → Website → Odusite → Public
+Sign Up** (`odusite_allow_signup`), which flips the standard
+`auth_signup.invitation_scope` parameter between `b2c` (free sign up) and `b2b`
+(invitation only). With it enabled, visitors register with name/email/password
+and go through **email double opt-in**: the account is created inactive, a
+confirmation link (`<odusite.site_url>/confirm/<token>`) is emailed, and the
+account only becomes usable once that link is clicked. Signing in before
+confirming returns a clear "confirm your email" message with a resend option.
+Requires `odusite.site_url` set and a working outgoing mail server.
 
 ## Webhooks (cache invalidation)
 

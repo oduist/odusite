@@ -6,13 +6,21 @@ Depends: `odusite_base`, `portal`, `auth_signup`. Provides JWT auth
 ## Models
 
 - `odusite.refresh.token` — see `03-auth.md`.
+- `res.users` (inherit): `odusite_email_confirmed` (Boolean, default False) +
+  helpers `_odusite_email_confirm_token()` / `_odusite_confirm_url()` /
+  `_odusite_send_confirmation_email()` for the double opt-in flow.
+- `res.config.settings` (inherit): `odusite_allow_signup` (Boolean) — the
+  Website → Odusite "Public Sign Up" toggle; maps to the
+  `auth_signup.invitation_scope` system parameter (`b2c`/`b2b`).
 - Mail template overrides (signup invite, password reset) pointing links to
-  `odusite.site_url`.
+  `odusite.site_url`, plus the new email-confirmation template
+  (`mail_template_odusite_email_confirm`).
 
 ## Endpoints
 
 Auth endpoints — see `../03-auth.md` (`/auth/login`, `/auth/refresh`,
-`/auth/logout`, `/auth/signup`, `/auth/password/forgot`, `/auth/password/reset`).
+`/auth/logout`, `/auth/signup`, `/auth/confirm`, `/auth/confirm/resend`,
+`/auth/password/forgot`, `/auth/password/reset`).
 
 All routes below require JWT (`auth_user=True`) unless noted.
 
@@ -45,5 +53,8 @@ project.task, helpdesk.ticket…).
 
 Block `portal`: `/portal` home (counter cards), `/portal/account`,
 `/portal/addresses`, `/portal/security` (password + sessions), login/signup/
-reset pages, auth middleware (cookie ↔ refresh flow in the Worker).
+reset pages plus `/confirm/[token]` (email double opt-in landing → posts to
+`/api/auth/confirm`), auth middleware (cookie ↔ refresh flow in the Worker).
+Signup shows a "check your email" state; login/signup/confirm expose a "resend
+confirmation" affordance (`/api/auth/resend`).
 Document sections (orders, invoices, tasks) are contributed by their blocks.

@@ -20,32 +20,69 @@ const errorMessages: Record<string, string> = {
 };
 const errorMessage = error ? (errorMessages[error] ?? errorMessages.unknown) : null;
 const disabled = error === 'disabled';
+
+// Double opt-in: after a successful signup the account is created but
+// inactive until the emailed confirmation link is used.
+const sent = Astro.url.searchParams.get('sent') === '1';
+const sentEmail = Astro.url.searchParams.get('email') ?? '';
 ---
 
-<AuthShell title="Create account" heading="Create account" subtitle="Register to track your orders, invoices and projects.">
-  {errorMessage && <Notice tone={disabled ? 'warning' : 'danger'}>{errorMessage}</Notice>}
-
-  {!disabled && (
-    <form method="post" action="/api/auth/signup">
-      <input type="hidden" name="next" value={next} />
-      <Input label="Name" name="name" required autocomplete="name" placeholder="Your full name" />
-      <Input label="Email" name="email" type="email" required autocomplete="email" placeholder="you@example.com" />
-      <Input label="Password" name="password" type="password" required autocomplete="new-password" />
-      <div class="signup__actions">
-        <Button type="submit" size="lg" class="signup__submit">Create account</Button>
+<AuthShell title="Create account" heading={sent ? 'Check your email' : 'Create account'} subtitle={sent ? undefined : 'Register to track your orders, invoices and projects.'}>
+  {sent ? (
+    <Fragment>
+      <Notice tone="success">
+        {sentEmail
+          ? `We sent a confirmation link to ${sentEmail}. Click it to activate your account, then sign in.`
+          : 'We sent you a confirmation link. Click it to activate your account, then sign in.'}
+      </Notice>
+      <p class="signup__hint">Didn't get the email? Check your spam folder or resend it.</p>
+      <form method="post" action="/api/auth/resend">
+        {sentEmail ? (
+          <input type="hidden" name="email" value={sentEmail} />
+        ) : (
+          <Input label="Email" name="email" type="email" required autocomplete="email" placeholder="you@example.com" />
+        )}
+        <div class="signup__actions">
+          <Button type="submit" size="lg" class="signup__submit">Resend confirmation email</Button>
+        </div>
+      </form>
+      <div class="signup__links">
+        <span>Already confirmed?</span>
+        <a href="/login">Sign in</a>
       </div>
-    </form>
-  )}
+    </Fragment>
+  ) : (
+    <Fragment>
+      {errorMessage && <Notice tone={disabled ? 'warning' : 'danger'}>{errorMessage}</Notice>}
 
-  <div class="signup__links">
-    <span>Already registered?</span>
-    <a href="/login">Sign in</a>
-  </div>
+      {!disabled && (
+        <form method="post" action="/api/auth/signup">
+          <input type="hidden" name="next" value={next} />
+          <Input label="Name" name="name" required autocomplete="name" placeholder="Your full name" />
+          <Input label="Email" name="email" type="email" required autocomplete="email" placeholder="you@example.com" />
+          <Input label="Password" name="password" type="password" required autocomplete="new-password" />
+          <div class="signup__actions">
+            <Button type="submit" size="lg" class="signup__submit">Create account</Button>
+          </div>
+        </form>
+      )}
+
+      <div class="signup__links">
+        <span>Already registered?</span>
+        <a href="/login">Sign in</a>
+      </div>
+    </Fragment>
+  )}
 </AuthShell>
 
 <style>
   .signup__actions { margin-top: var(--od-space-2); }
   :global(.signup__submit) { width: 100%; }
+  .signup__hint {
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-subtle);
+    margin-bottom: var(--od-space-4);
+  }
   .signup__links {
     display: flex;
     gap: var(--od-space-2);

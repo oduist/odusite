@@ -14,35 +14,67 @@ if (Astro.locals.user) return Astro.redirect(next, 303);
 const error = Astro.url.searchParams.get('error');
 const signedUp = Astro.url.searchParams.get('signup') === '1';
 const passwordReset = Astro.url.searchParams.get('reset') === '1';
+const resent = Astro.url.searchParams.get('resent') === '1';
+
+// Account exists but the email has not been confirmed yet: show a resend
+// affordance instead of the sign-in form.
+const unconfirmed = error === 'unconfirmed';
+const unconfirmedEmail = Astro.url.searchParams.get('email') ?? '';
 
 const errorMessages: Record<string, string> = {
   credentials: 'Invalid email or password.',
   mfa: 'This account requires two-factor authentication, which is not supported here yet. Please sign in through the backend.',
   unknown: 'Something went wrong. Please try again.',
 };
-const errorMessage = error ? (errorMessages[error] ?? errorMessages.unknown) : null;
+const errorMessage = error && !unconfirmed ? (errorMessages[error] ?? errorMessages.unknown) : null;
 
 const signupHref = next !== '/portal' ? `/signup?next=${encodeURIComponent(next)}` : '/signup';
 ---
 
 <AuthShell title="Sign in" heading="Sign in" subtitle="Access your customer portal.">
+  {resent && <Notice tone="success">Confirmation email sent. Please check your inbox.</Notice>}
   {signedUp && <Notice tone="success">Account created. Sign in to continue.</Notice>}
   {passwordReset && <Notice tone="success">Password updated. Sign in with your new password.</Notice>}
-  {errorMessage && <Notice tone="danger">{errorMessage}</Notice>}
 
-  <form method="post" action="/api/auth/login">
-    <input type="hidden" name="next" value={next} />
-    <Input label="Email" name="login" type="email" required autocomplete="email" placeholder="you@example.com" />
-    <Input label="Password" name="password" type="password" required autocomplete="current-password" />
-    <div class="login__actions">
-      <Button type="submit" size="lg" class="login__submit">Sign in</Button>
-    </div>
-  </form>
+  {unconfirmed ? (
+    <Fragment>
+      <Notice tone="warning">
+        Please confirm your email address before signing in. We can send you a new confirmation link.
+      </Notice>
+      <form method="post" action="/api/auth/resend">
+        {unconfirmedEmail ? (
+          <input type="hidden" name="email" value={unconfirmedEmail} />
+        ) : (
+          <Input label="Email" name="email" type="email" required autocomplete="email" placeholder="you@example.com" />
+        )}
+        <div class="login__actions">
+          <Button type="submit" size="lg" class="login__submit">Resend confirmation email</Button>
+        </div>
+      </form>
+      <div class="login__links">
+        <a href="/login">Back to sign in</a>
+        <a href={signupHref}>Create an account</a>
+      </div>
+    </Fragment>
+  ) : (
+    <Fragment>
+      {errorMessage && <Notice tone="danger">{errorMessage}</Notice>}
 
-  <div class="login__links">
-    <a href="/reset">Forgot password?</a>
-    <a href={signupHref}>Create an account</a>
-  </div>
+      <form method="post" action="/api/auth/login">
+        <input type="hidden" name="next" value={next} />
+        <Input label="Email" name="login" type="email" required autocomplete="email" placeholder="you@example.com" />
+        <Input label="Password" name="password" type="password" required autocomplete="current-password" />
+        <div class="login__actions">
+          <Button type="submit" size="lg" class="login__submit">Sign in</Button>
+        </div>
+      </form>
+
+      <div class="login__links">
+        <a href="/reset">Forgot password?</a>
+        <a href={signupHref}>Create an account</a>
+      </div>
+    </Fragment>
+  )}
 </AuthShell>
 
 <style>

@@ -1,11 +1,19 @@
-// POST /api/auth/signup — b2c signup. On success we sign the user in
-// directly (login with the just-created credentials) and land on ?next=.
-// 409 (email exists) and 403 (signup disabled) map to friendly errors.
+// POST /api/auth/signup — b2c signup with email double opt-in. On success the
+// backend creates an inactive account and emails a confirmation link, then
+// returns {status:'confirmation_sent', email}; we land on the "check your
+// email" state. 409 (email exists) and 403 (signup disabled) map to friendly
+// errors. (An invited signup, not reachable from this public form, would
+// return a token pair — handled defensively.)
 import type { APIRoute } from 'astro';
 import { apiFetch, OdusiteApiError } from '@lib/api/client';
 import { setAuthCookies } from '@lib/auth/session';
 import { redirect303, safePath } from '../../lib';
 import type { AuthTokens } from '../../types';
+
+interface SignupResult extends Partial<AuthTokens> {
+  status?: string;
+  email?: string;
+}
 
 export const prerender = false;
 
@@ -32,12 +40,22 @@ export const POST: APIRoute = async (context) => {
   }
 
   try {
-    await apiFetch(context, '/auth/signup', {
+    const result = await apiFetch<SignupResult>(context, '/auth/signup', {
       method: 'POST',
       body: { name, email, password },
       auth: false,
       cart: false,
     });
+    // Invited signups return a token pair (auto-login); the b2c double
+    // opt-in path returns confirmation_sent (no tokens).
+    const access = result.access_token;
+    const refresh = result.refresh_token;
+    if (typeof access === 'string' && typeof refresh === 'string') {
+      setAuthCookies(context, access, refresh);
+      return redirect303(context, next);
+    }
+    const confirmEmail = typeof result.email === 'string' ? result.email : email;
+    return redirect303(context, `/signup?sent=1&email=${encodeURIComponent(confirmEmail)}`);
   } catch (error) {
     if (error instanceof OdusiteApiError) {
       if (error.status === 409) return redirect303(context, back('exists'));
@@ -45,19 +63,5 @@ export const POST: APIRoute = async (context) => {
       if (error.status === 422 || error.status === 400) return redirect303(context, back('validation'));
     }
     return redirect303(context, back('unknown'));
-  }
-
-  // Signup succeeded — obtain a token pair right away.
-  try {
-    const tokens = await apiFetch<AuthTokens>(context, '/auth/login', {
-      method: 'POST',
-      body: { login: email, password },
-      auth: false,
-      cart: false,
-    });
-    setAuthCookies(context, tokens.access_token, tokens.refresh_token);
-    return redirect303(context, next);
-  } catch {
-    return redirect303(context, '/login?signup=1');
   }
 };

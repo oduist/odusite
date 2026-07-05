@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!--
+    Add the "Public Sign Up" toggle to the Website > Odusite settings block
+    defined in odusite_base. The field flips auth_signup.invitation_scope
+    between 'b2c' and 'b2b' (see models/res_config_settings.py).
+    -->
+    <record id="res_config_settings_view_form" model="ir.ui.view">
+        <field name="name">res.config.settings.view.form.inherit.odusite.portal</field>
+        <field name="model">res.config.settings</field>
+        <field name="inherit_id" ref="odusite_base.res_config_settings_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//block[@name='odusite_block']" position="inside">
+                <setting string="Public Sign Up"
+                         help="Let visitors register their own portal account (with email double opt-in). When off, accounts are created by invitation only.">
+                    <field name="odusite_allow_signup"/>
+                </setting>
+            </xpath>
+        </field>
+    </record>
+</odoo>

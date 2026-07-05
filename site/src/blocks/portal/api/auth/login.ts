@@ -34,6 +34,12 @@ export const POST: APIRoute = async (context) => {
   } catch (error) {
     if (error instanceof OdusiteApiError) {
       if (error.status === 409) return redirect303(context, back('mfa'));
+      // Email not confirmed yet → offer to resend the confirmation link.
+      if (error.status === 403 && error.code === 'email_not_confirmed') {
+        const params = new URLSearchParams({ error: 'unconfirmed', email: login });
+        if (next !== '/portal') params.set('next', next);
+        return redirect303(context, `/login?${params.toString()}`);
+      }
       if (error.status === 401 || error.status === 403 || error.status === 422) {
         return redirect303(context, back('credentials'));
       }

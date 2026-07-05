@@ -1,0 +1,69 @@
+---
+// Email confirmation landing page (specs/03-auth.md). The email link is a
+// GET to /confirm/<token>; on load the page POSTs the token to
+// /api/auth/confirm (auto-submitted, with a manual button as a no-JS
+// fallback). The proxy sets the auth cookies and redirects to /portal; on
+// failure it bounces back here with ?error= so we can offer a resend.
+import Button from '@theme/Button.astro';
+import Input from '@theme/Input.astro';
+import AuthShell from '../../components/AuthShell.astro';
+import Notice from '../../components/Notice.astro';
+
+export const prerender = false;
+
+const token = Astro.params.token ?? '';
+if (!token) return Astro.redirect('/login', 303);
+if (Astro.locals.user) return Astro.redirect('/portal', 303);
+
+const error = Astro.url.searchParams.get('error');
+const errorMessages: Record<string, string> = {
+  expired: 'This confirmation link has expired. Request a new one below.',
+  invalid: 'This confirmation link is invalid or has already been used. Request a new one below.',
+  unknown: 'Something went wrong confirming your email. Please try again.',
+};
+const errorMessage = error ? (errorMessages[error] ?? errorMessages.unknown) : null;
+---
+
+<AuthShell title="Confirm your email" heading="Confirm your email">
+  {errorMessage ? (
+    <Fragment>
+      <Notice tone="danger">{errorMessage}</Notice>
+      <form method="post" action="/api/auth/resend">
+        <Input label="Email" name="email" type="email" required autocomplete="email" placeholder="you@example.com" />
+        <div class="confirm__actions">
+          <Button type="submit" size="lg" class="confirm__submit">Resend confirmation email</Button>
+        </div>
+      </form>
+      <div class="confirm__links">
+        <a href="/login">Back to sign in</a>
+      </div>
+    </Fragment>
+  ) : (
+    <Fragment>
+      <p class="confirm__hint">Confirming your email address…</p>
+      <form id="confirm-form" method="post" action="/api/auth/confirm">
+        <input type="hidden" name="token" value={token} />
+        <div class="confirm__actions">
+          <Button type="submit" size="lg" class="confirm__submit">Confirm your email</Button>
+        </div>
+      </form>
+      <script is:inline>
+        document.getElementById('confirm-form')?.requestSubmit();
+      </script>
+    </Fragment>
+  )}
+</AuthShell>
+
+<style>
+  .confirm__hint {
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-subtle);
+    margin-bottom: var(--od-space-4);
+  }
+  .confirm__actions { margin-top: var(--od-space-2); }
+  :global(.confirm__submit) { width: 100%; }
+  .confirm__links {
+    margin-top: var(--od-space-5);
+    font-size: var(--od-text-sm);
+  }
+</style>
