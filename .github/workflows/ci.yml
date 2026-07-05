@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  addons:
+    name: Odoo addon tests
+    runs-on: ubuntu-latest
+    container: odoo:19.0
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: odoo
+          POSTGRES_PASSWORD: odoo
+          POSTGRES_DB: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install odusite addons and run their tests
+        run: |
+          MODULES=$(ls addons | paste -sd, -)
+          TEST_TAGS=$(ls addons | sed 's|^|/|' | paste -sd, -)
+          odoo \
+            --db_host=postgres -r odoo -w odoo -d odusite_ci \
+            --addons-path="/usr/lib/python3/dist-packages/odoo/addons,$GITHUB_WORKSPACE/addons" \
+            -i "$MODULES" \
+            --test-enable --test-tags="$TEST_TAGS" \
+            --stop-after-init --log-level=warn --workers=0 --max-cron-threads=0
+
+  site:
+    name: Astro site check & build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: site/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck (all blocks enabled)
+        run: ODUSITE_BLOCK_FORUM=1 ODUSITE_BLOCK_COURSES=1 pnpm check
+      - name: Build (all blocks enabled)
+        run: ODUSITE_BLOCK_FORUM=1 ODUSITE_BLOCK_COURSES=1 pnpm build
+      - name: Build (default block set)
+        run: pnpm build
