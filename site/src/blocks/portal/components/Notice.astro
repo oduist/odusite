@@ -1,0 +1,35 @@
+---
+// Inline status notice (form results, payment states).
+interface Props {
+  tone?: 'success' | 'danger' | 'info' | 'warning';
+}
+const { tone = 'info' } = Astro.props;
+---
+
+<p class:list={['od-notice', `od-notice--${tone}`]} role="status"><slot /></p>
+
+<style>
+  .od-notice {
+    margin: 0 0 var(--od-space-5);
+    padding: var(--od-space-3) var(--od-space-4);
+    border-radius: var(--od-radius-m);
+    border: 1px solid transparent;
+    font-size: var(--od-text-sm);
+  }
+  .od-notice--success {
+    background: var(--od-success-soft);
+    color: var(--od-success);
+  }
+  .od-notice--danger {
+    background: var(--od-danger-soft);
+    color: var(--od-danger);
+  }
+  .od-notice--warning {
+    background: var(--od-warning-soft);
+    color: var(--od-warning);
+  }
+  .od-notice--info {
+    background: var(--od-info-soft);
+    color: var(--od-info);
+  }
+</style>

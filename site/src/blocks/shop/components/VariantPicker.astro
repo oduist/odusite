@@ -1,0 +1,418 @@
+---
+// Variant picker + buy box: attribute selection (radio pills / color swatches /
+// select depending on display_type), price that refreshes through the
+// same-origin /api/shop/combination endpoint, quantity input, add to cart.
+import Button from '@theme/Button.astro';
+import { formatMoney, localeOf } from '../lib';
+import type { ProductDetail } from '../types';
+
+interface Props {
+  product: ProductDetail;
+  lang: string;
+}
+const { product, lang } = Astro.props;
+const info = product.combination;
+const currency = info.currency;
+const discounted = !!info.has_discounted_price;
+
+const extra = (priceExtra: number | undefined): string =>
+  priceExtra ? ` (+${formatMoney(priceExtra, currency, lang)})` : '';
+---
+
+<section
+  class="buy"
+  data-variant-picker
+  data-template-id={product.id}
+  data-product-id={info.product_id ?? ''}
+  data-currency={currency}
+  data-locale={localeOf(lang)}
+>
+  <p class="buy__price">
+    <s class="buy__list od-mono" data-list-price hidden={!discounted}>
+      {formatMoney(info.list_price, currency, lang)}
+    </s>
+    <span class="buy__current od-mono" data-price>
+      {formatMoney(info.price, currency, lang)}
+    </span>
+  </p>
+
+  {product.attribute_lines.map((line) => (
+    <div class="buy__line">
+      <span class="buy__attr" id={`attr-label-${line.attribute.id}`}>{line.attribute.name}</span>
+      {line.display_type === 'select' ? (
+        <select
+          class="buy__select"
+          data-attr-input
+          aria-labelledby={`attr-label-${line.attribute.id}`}
+        >
+          {line.values.map((value, index) => (
+            <option value={value.id} selected={index === 0}>
+              {value.name}{extra(value.price_extra)}
+            </option>
+          ))}
+        </select>
+      ) : line.display_type === 'color' ? (
+        <div class="buy__swatches" role="radiogroup" aria-labelledby={`attr-label-${line.attribute.id}`}>
+          {line.values.map((value, index) => (
+            <label class="buy__swatch" title={value.name}>
+              <input
+                type="radio"
+                name={`attr-${line.attribute.id}`}
+                value={value.id}
+                checked={index === 0}
+                data-attr-input
+              />
+              <span
+                class="buy__swatch-dot"
+                style={`background:${value.html_color || 'var(--od-border-strong)'}`}
+                aria-hidden="true"
+              ></span>
+              <span class="buy__sr-only">{value.name}</span>
+            </label>
+          ))}
+        </div>
+      ) : (
+        <div class="buy__pills" role="radiogroup" aria-labelledby={`attr-label-${line.attribute.id}`}>
+          {line.values.map((value, index) => (
+            <label class="buy__pill">
+              <input
+                type="radio"
+                name={`attr-${line.attribute.id}`}
+                value={value.id}
+                checked={index === 0}
+                data-attr-input
+              />
+              <span>{value.name}{extra(value.price_extra)}</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  ))}
+
+  <div class="buy__qty-row">
+    <label for="buy-qty">Quantity</label>
+    <input
+      id="buy-qty"
+      class="buy__qty"
+      data-qty
+      type="number"
+      min="1"
+      step="1"
+      value="1"
+      inputmode="numeric"
+    />
+  </div>
+
+  <div class="buy__actions">
+    <Button type="button" size="lg" class="buy__add">Add to cart</Button>
+  </div>
+
+  <p class="buy__unavailable" data-unavailable hidden>This combination is not available.</p>
+  <p class="buy__warning" data-warning hidden></p>
+  <p class="buy__added" data-added hidden>Added to cart — <a href="/cart">view cart</a>.</p>
+  <p class="buy__error" data-error hidden></p>
+</section>
+
+<script>
+  interface CombinationData {
+    product_id?: number | null;
+    price?: number;
+    list_price?: number;
+    has_discounted_price?: boolean;
+    image?: string | null;
+    is_combination_possible?: boolean;
+  }
+  interface AddData {
+    count?: number;
+    warnings?: string[];
+  }
+  interface Envelope<T> {
+    data?: T;
+    error?: { message?: string };
+  }
+
+  function initPicker(root: HTMLElement): void {
+    const templateId = Number(root.dataset.templateId);
+    const locale = root.dataset.locale || undefined;
+    const currency = root.dataset.currency || 'USD';
+    const fmt = (value: number): string => {
+      try {
+        return new Intl.NumberFormat(locale, { style: 'currency', currency }).format(value);
+      } catch {
+        return `${value.toFixed(2)} ${currency}`;
+      }
+    };
+
+    const priceEl = root.querySelector<HTMLElement>('[data-price]');
+    const listEl = root.querySelector<HTMLElement>('[data-list-price]');
+    const qtyEl = root.querySelector<HTMLInputElement>('[data-qty]');
+    const addBtn = root.querySelector<HTMLButtonElement>('.buy__add');
+    const unavailableEl = root.querySelector<HTMLElement>('[data-unavailable]');
+    const warningEl = root.querySelector<HTMLElement>('[data-warning]');
+    const addedEl = root.querySelector<HTMLElement>('[data-added]');
+    const errorEl = root.querySelector<HTMLElement>('[data-error]');
+
+    const combination = (): number[] => {
+      const ids: number[] = [];
+      root.querySelectorAll<HTMLSelectElement>('select[data-attr-input]').forEach((select) => {
+        if (select.value) ids.push(Number(select.value));
+      });
+      root
+        .querySelectorAll<HTMLInputElement>('input[data-attr-input]:checked')
+        .forEach((input) => ids.push(Number(input.value)));
+      return ids;
+    };
+    const quantity = (): number =>
+      Math.max(1, Math.floor(Number(qtyEl?.value ?? '1')) || 1);
+
+    async function refresh(): Promise<void> {
+      try {
+        const response = await fetch('/api/shop/combination', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            product_template_id: templateId,
+            combination: combination(),
+            quantity: quantity(),
+          }),
+        });
+        const payload = (await response.json()) as Envelope<CombinationData>;
+        if (!response.ok || !payload.data) return;
+        const info = payload.data;
+        if (priceEl && typeof info.price === 'number') priceEl.textContent = fmt(info.price);
+        if (listEl) {
+          const showList = !!info.has_discounted_price && typeof info.list_price === 'number';
+          listEl.hidden = !showList;
+          if (showList) listEl.textContent = fmt(info.list_price as number);
+        }
+        root.dataset.productId = info.product_id ? String(info.product_id) : '';
+        const possible = info.is_combination_possible !== false;
+        if (addBtn) addBtn.disabled = !possible;
+        if (unavailableEl) unavailableEl.hidden = possible;
+        if (info.image) {
+          const main = document.querySelector<HTMLImageElement>('[data-gallery-main]');
+          if (main) main.src = info.image.replace('/web/image', '/img');
+        }
+      } catch {
+        // Network hiccup: keep the current server-rendered price.
+      }
+    }
+
+    root.addEventListener('change', (event) => {
+      const target = event.target as HTMLElement | null;
+      if (target && target.matches('[data-attr-input], [data-qty]')) {
+        if (addedEl) addedEl.hidden = true;
+        if (errorEl) errorEl.hidden = true;
+        void refresh();
+      }
+    });
+
+    addBtn?.addEventListener('click', async () => {
+      if (addedEl) addedEl.hidden = true;
+      if (errorEl) errorEl.hidden = true;
+      if (warningEl) warningEl.hidden = true;
+      addBtn.disabled = true;
+      try {
+        const productId = Number(root.dataset.productId) || undefined;
+        const response = await fetch('/api/shop/cart/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            product_template_id: templateId,
+            product_id: productId,
+            combination: combination(),
+            quantity: quantity(),
+          }),
+        });
+        const payload = (await response.json()) as Envelope<AddData>;
+        if (!response.ok || !payload.data) {
+          if (errorEl) {
+            errorEl.textContent = payload.error?.message ?? 'Could not add to cart.';
+            errorEl.hidden = false;
+          }
+          return;
+        }
+        if (addedEl) addedEl.hidden = false;
+        const warnings = payload.data.warnings;
+        if (warningEl && warnings && warnings.length > 0) {
+          warningEl.textContent = warnings.join(' ');
+          warningEl.hidden = false;
+        }
+        const count = payload.data.count;
+        if (typeof count === 'number') {
+          document.querySelectorAll<HTMLElement>('[data-cart-count]').forEach((badge) => {
+            badge.textContent = String(count);
+            badge.hidden = count === 0;
+          });
+        }
+      } catch {
+        if (errorEl) {
+          errorEl.textContent = 'Could not add to cart. Please try again.';
+          errorEl.hidden = false;
+        }
+      } finally {
+        addBtn.disabled = false;
+      }
+    });
+
+    // Sync price with the actual first-values combination when variants exist.
+    if (root.querySelector('[data-attr-input]')) void refresh();
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-variant-picker]').forEach(initPicker);
+</script>
+
+<style>
+  .buy {
+    display: flex;
+    flex-direction: column;
+    gap: var(--od-space-4);
+  }
+  .buy__price {
+    display: flex;
+    align-items: baseline;
+    gap: var(--od-space-3);
+    margin: 0;
+  }
+  .buy__current {
+    font-size: var(--od-text-2xl);
+    font-weight: 650;
+    color: var(--od-fg);
+  }
+  .buy__list {
+    font-size: var(--od-text-lg);
+    color: var(--od-fg-subtle);
+  }
+  .buy__line {
+    display: flex;
+    flex-direction: column;
+    gap: var(--od-space-2);
+  }
+  .buy__attr {
+    font-size: var(--od-text-sm);
+    font-weight: 550;
+    color: var(--od-fg);
+  }
+  .buy__select {
+    font: inherit;
+    font-size: var(--od-text-sm);
+    color: var(--od-fg);
+    background: var(--od-bg-inset);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-m);
+    padding: var(--od-space-2) var(--od-space-3);
+    max-width: 320px;
+  }
+  .buy__select:focus {
+    border-color: var(--od-accent);
+    outline: none;
+  }
+  .buy__pills,
+  .buy__swatches {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--od-space-2);
+  }
+  .buy__pill input,
+  .buy__swatch input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .buy__pill {
+    position: relative;
+    cursor: pointer;
+  }
+  .buy__pill span {
+    display: inline-flex;
+    align-items: center;
+    padding: var(--od-space-1) var(--od-space-3);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-full);
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-muted);
+    transition:
+      border-color var(--od-dur-fast) var(--od-ease),
+      color var(--od-dur-fast) var(--od-ease);
+  }
+  .buy__pill:hover span {
+    border-color: var(--od-border-strong);
+    color: var(--od-fg);
+  }
+  .buy__pill input:checked + span {
+    border-color: var(--od-accent);
+    color: var(--od-accent);
+    background: var(--od-accent-soft);
+  }
+  .buy__pill input:focus-visible + span {
+    outline: 2px solid var(--od-accent);
+    outline-offset: 2px;
+  }
+  .buy__swatch {
+    position: relative;
+    cursor: pointer;
+  }
+  .buy__swatch-dot {
+    display: block;
+    width: 28px;
+    height: 28px;
+    border-radius: var(--od-radius-full);
+    border: 2px solid var(--od-border);
+    transition: border-color var(--od-dur-fast) var(--od-ease);
+  }
+  .buy__swatch:hover .buy__swatch-dot {
+    border-color: var(--od-border-strong);
+  }
+  .buy__swatch input:checked + .buy__swatch-dot {
+    border-color: var(--od-accent);
+  }
+  .buy__swatch input:focus-visible + .buy__swatch-dot {
+    outline: 2px solid var(--od-accent);
+    outline-offset: 2px;
+  }
+  .buy__sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .buy__qty-row {
+    display: flex;
+    align-items: center;
+    gap: var(--od-space-3);
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-muted);
+  }
+  .buy__qty {
+    width: 84px;
+    font: inherit;
+    color: var(--od-fg);
+    background: var(--od-bg-inset);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-m);
+    padding: var(--od-space-2) var(--od-space-3);
+  }
+  .buy__qty:focus {
+    border-color: var(--od-accent);
+    outline: none;
+  }
+  .buy__unavailable,
+  .buy__error {
+    color: var(--od-danger);
+    margin: 0;
+    font-size: var(--od-text-sm);
+  }
+  .buy__warning {
+    color: var(--od-warning);
+    margin: 0;
+    font-size: var(--od-text-sm);
+  }
+  .buy__added {
+    color: var(--od-success);
+    margin: 0;
+    font-size: var(--od-text-sm);
+  }
+</style>

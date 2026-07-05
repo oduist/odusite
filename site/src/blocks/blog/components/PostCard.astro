@@ -1,0 +1,88 @@
+---
+import Badge from '@theme/Badge.astro';
+import Card from '@theme/Card.astro';
+import { imgUrl } from '@lib/api/client';
+import { formatDate } from '../lib/utils';
+import type { BlogPostListItem } from '../types';
+
+interface Props {
+  post: BlogPostListItem;
+}
+const { post } = Astro.props;
+const cover = imgUrl(post.cover);
+const avatar = imgUrl(post.author?.avatar);
+---
+
+<Card href={`/blog/${post.slug}`} padded={false}>
+  {cover ? (
+    <img class="post-card__cover" src={cover} alt="" loading="lazy" decoding="async" />
+  ) : (
+    <div class="post-card__cover post-card__cover--placeholder" aria-hidden="true"></div>
+  )}
+  <div class="post-card__body">
+    {post.tags.length > 0 && (
+      <div class="post-card__tags">
+        {post.tags.map((tag) => <Badge tone="accent">{tag.name}</Badge>)}
+      </div>
+    )}
+    <h3 class="post-card__title">{post.name}</h3>
+    {post.teaser && <p class="post-card__teaser">{post.teaser}</p>}
+    <p class="post-card__meta">
+      {avatar && <img class="post-card__avatar" src={avatar} alt="" width="20" height="20" loading="lazy" />}
+      <span>{post.author.name}</span>
+      <span aria-hidden="true">·</span>
+      <time datetime={post.post_date}>{formatDate(post.post_date)}</time>
+    </p>
+  </div>
+</Card>
+
+<style>
+  .post-card__cover {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    border-bottom: 1px solid var(--od-border);
+  }
+  .post-card__cover--placeholder {
+    background:
+      radial-gradient(80% 120% at 20% 0%, var(--od-accent-soft), transparent 65%),
+      var(--od-bg-inset);
+  }
+  .post-card__body {
+    padding: var(--od-space-4) var(--od-space-5) var(--od-space-5);
+  }
+  .post-card__tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--od-space-1);
+    margin-bottom: var(--od-space-2);
+  }
+  .post-card__title {
+    font-size: var(--od-text-lg);
+    margin-bottom: var(--od-space-2);
+    color: var(--od-fg);
+  }
+  .post-card__teaser {
+    color: var(--od-fg-muted);
+    font-size: var(--od-text-sm);
+    margin-bottom: var(--od-space-3);
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .post-card__meta {
+    display: flex;
+    align-items: center;
+    gap: var(--od-space-2);
+    margin: 0;
+    color: var(--od-fg-subtle);
+    font-size: var(--od-text-xs);
+  }
+  .post-card__avatar {
+    width: 20px;
+    height: 20px;
+    border-radius: var(--od-radius-full);
+    object-fit: cover;
+  }
+</style>

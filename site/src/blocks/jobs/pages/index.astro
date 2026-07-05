@@ -1,0 +1,299 @@
+---
+import Base from '@layouts/Base.astro';
+import Pagination from '@components/Pagination.astro';
+import Badge from '@theme/Badge.astro';
+import Button from '@theme/Button.astro';
+import Card from '@theme/Card.astro';
+import EmptyState from '@theme/EmptyState.astro';
+import { apiFetch } from '@lib/api/client';
+import type { ApiListResult } from '@lib/api/client';
+import { TAGS_HEADER } from '@lib/cache';
+import { facetEntries } from '../lib/facets';
+import type { JobListItem } from '../types';
+
+export const prerender = false;
+
+const params = Astro.url.searchParams;
+const search = params.get('search')?.trim() ?? '';
+const department = params.get('department') ?? '';
+const country = params.get('country') ?? '';
+const employmentType = params.get('employment_type') ?? '';
+const page = Math.max(1, Number.parseInt(params.get('page') ?? '1', 10) || 1);
+
+const { data: jobs, meta } = await apiFetch<ApiListResult<JobListItem>>(Astro, '/jobs', {
+  auth: false,
+  cart: false,
+  query: {
+    page,
+    search: search || undefined,
+    department: department || undefined,
+    country: country || undefined,
+    employment_type: employmentType || undefined,
+  },
+});
+
+// meta.facets: departments / countries / employment types with counts.
+// Key candidates are tried in order (the spec names the groups loosely).
+const facetGroups = [
+  {
+    title: 'Department',
+    param: 'department',
+    entries: facetEntries(meta.facets, ['departments', 'department']),
+  },
+  {
+    title: 'Country',
+    param: 'country',
+    entries: facetEntries(meta.facets, ['countries', 'locations', 'country']),
+  },
+  {
+    title: 'Type',
+    param: 'employment_type',
+    entries: facetEntries(meta.facets, ['employment_types', 'types', 'employment_type']),
+  },
+].filter((group) => group.entries.length > 0);
+
+/** Same URL with one filter changed (page reset). null removes the filter. */
+function filterUrl(param: string, value: string | null): string {
+  const next = new URL(Astro.url);
+  if (value === null) next.searchParams.delete(param);
+  else next.searchParams.set(param, value);
+  next.searchParams.delete('page');
+  return next.pathname + next.search;
+}
+
+function formatDate(value: string | null): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+Astro.response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=600');
+Astro.response.headers.set(TAGS_HEADER, 'jobs');
+---
+
+<Base title="Jobs" description="Open positions — come build with us.">
+  <section class="od-section od-container">
+    <header class="jobs-head">
+      <h1>Open positions</h1>
+      <p class="jobs-head__count">
+        {meta.total} open {meta.total === 1 ? 'position' : 'positions'}
+      </p>
+    </header>
+
+    <div class="jobs-layout">
+      <aside class="jobs-side" aria-label="Job filters">
+        <form class="jobs-search" method="get" action="/jobs" role="search">
+          <input
+            class="jobs-search__input"
+            type="search"
+            name="search"
+            value={search}
+            placeholder="Search positions…"
+            aria-label="Search positions"
+          />
+          {department && <input type="hidden" name="department" value={department} />}
+          {country && <input type="hidden" name="country" value={country} />}
+          {employmentType && <input type="hidden" name="employment_type" value={employmentType} />}
+          <Button type="submit" variant="secondary" size="sm">Search</Button>
+        </form>
+
+        {facetGroups.map((group) => {
+          const current = params.get(group.param) ?? '';
+          return (
+            <nav class="jobs-facet" aria-label={`Filter by ${group.title.toLowerCase()}`}>
+              <h2 class="jobs-facet__title">{group.title}</h2>
+              <ul class="jobs-facet__list">
+                <li>
+                  <a
+                    class:list={['jobs-facet__link', { active: !current }]}
+                    href={filterUrl(group.param, null)}
+                    aria-current={!current ? 'true' : undefined}
+                  >
+                    All
+                  </a>
+                </li>
+                {group.entries.map((entry) => {
+                  const active = current === entry.value;
+                  return (
+                    <li>
+                      <a
+                        class:list={['jobs-facet__link', { active }]}
+                        href={filterUrl(group.param, active ? null : entry.value)}
+                        aria-current={active ? 'true' : undefined}
+                      >
+                        <span class="jobs-facet__label">{entry.label}</span>
+                        {entry.count !== null && <span class="jobs-facet__count">{entry.count}</span>}
+                      </a>
+                    </li>
+                  );
+                })}
+              </ul>
+            </nav>
+          );
+        })}
+      </aside>
+
+      <div class="jobs-main">
+        {jobs.length === 0 ? (
+          <EmptyState
+            title="No positions found"
+            description="Try removing some filters, or check back later — new roles open regularly."
+          >
+            <Button href="/jobs" variant="secondary">Clear filters</Button>
+          </EmptyState>
+        ) : (
+          <ul class="jobs-list">
+            {jobs.map((job) => {
+              const published = formatDate(job.published_date);
+              const location = [job.location?.city, job.location?.country]
+                .filter(Boolean)
+                .join(', ');
+              return (
+                <li>
+                  <Card href={`/jobs/${job.slug}`} padded={true}>
+                    <div class="job-card">
+                      <div class="job-card__main">
+                        <h3 class="job-card__title">{job.name}</h3>
+                        <p class="job-card__meta">
+                          {job.department && <span>{job.department}</span>}
+                          {location && <span>{location}</span>}
+                          {published && <span>Posted {published}</span>}
+                        </p>
+                      </div>
+                      <div class="job-card__badges">
+                        {job.employment_type && <Badge tone="info">{job.employment_type}</Badge>}
+                        {job.is_remote && <Badge tone="success">Remote</Badge>}
+                      </div>
+                    </div>
+                  </Card>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        <Pagination meta={meta} url={Astro.url} />
+      </div>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .jobs-head {
+    display: flex;
+    align-items: baseline;
+    gap: var(--od-space-4);
+    flex-wrap: wrap;
+  }
+  .jobs-head__count {
+    color: var(--od-fg-subtle);
+    font-size: var(--od-text-sm);
+  }
+
+  .jobs-layout {
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    gap: var(--od-space-7);
+    align-items: start;
+  }
+  @media (max-width: 800px) {
+    .jobs-layout { grid-template-columns: 1fr; }
+  }
+
+  .jobs-search {
+    display: flex;
+    gap: var(--od-space-2);
+    margin-bottom: var(--od-space-5);
+  }
+  .jobs-search__input {
+    flex: 1;
+    min-width: 0;
+    font: inherit;
+    font-size: var(--od-text-sm);
+    color: var(--od-fg);
+    background: var(--od-bg-inset);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-m);
+    padding: var(--od-space-2) var(--od-space-3);
+    transition: border-color var(--od-dur-fast) var(--od-ease);
+  }
+  .jobs-search__input::placeholder { color: var(--od-fg-subtle); }
+  .jobs-search__input:focus { border-color: var(--od-accent); outline: none; }
+
+  .jobs-facet { margin-bottom: var(--od-space-5); }
+  .jobs-facet__title {
+    font-size: var(--od-text-xs);
+    font-weight: 600;
+    letter-spacing: var(--od-tracking-wide);
+    text-transform: uppercase;
+    color: var(--od-fg-subtle);
+    margin-bottom: var(--od-space-2);
+  }
+  .jobs-facet__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .jobs-facet__link {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--od-space-2);
+    padding: var(--od-space-1) var(--od-space-3);
+    border-radius: var(--od-radius-s);
+    color: var(--od-fg-muted);
+    font-size: var(--od-text-sm);
+  }
+  .jobs-facet__link:hover { background: var(--od-bg-hover); color: var(--od-fg); }
+  .jobs-facet__link.active {
+    background: var(--od-accent-soft);
+    color: var(--od-accent);
+    font-weight: 550;
+  }
+  .jobs-facet__label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .jobs-facet__count {
+    font-size: var(--od-text-xs);
+    color: var(--od-fg-subtle);
+  }
+  .jobs-facet__link.active .jobs-facet__count { color: inherit; }
+
+  .jobs-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--od-space-3);
+  }
+  .job-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: var(--od-space-4);
+    flex-wrap: wrap;
+  }
+  .job-card__title {
+    margin: 0 0 var(--od-space-1);
+    font-size: var(--od-text-lg);
+  }
+  .job-card__meta {
+    margin: 0;
+    display: flex;
+    gap: var(--od-space-3);
+    flex-wrap: wrap;
+    color: var(--od-fg-subtle);
+    font-size: var(--od-text-sm);
+  }
+  .job-card__badges {
+    display: flex;
+    gap: var(--od-space-2);
+    flex-wrap: wrap;
+  }
+</style>

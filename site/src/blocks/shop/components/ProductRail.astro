@@ -1,0 +1,42 @@
+---
+// Horizontal product rail (alternatives / accessories on the product page).
+import ProductCard from './ProductCard.astro';
+import type { ProductListItem } from '../types';
+
+interface Props {
+  title: string;
+  products: ProductListItem[] | undefined;
+  lang: string;
+}
+const { title, products, lang } = Astro.props;
+const items = products ?? [];
+---
+
+{items.length > 0 && (
+  <section class="rail">
+    <h2 class="rail__title">{title}</h2>
+    <div class="rail__track">
+      {items.map((product) => (
+        <ProductCard product={product} lang={lang} />
+      ))}
+    </div>
+  </section>
+)}
+
+<style>
+  .rail {
+    margin-top: var(--od-space-8);
+  }
+  .rail__title {
+    font-size: var(--od-text-xl);
+    margin-bottom: var(--od-space-4);
+  }
+  .rail__track {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(210px, 250px);
+    gap: var(--od-space-4);
+    overflow-x: auto;
+    padding-bottom: var(--od-space-2);
+  }
+</style>

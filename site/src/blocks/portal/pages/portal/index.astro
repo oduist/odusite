@@ -1,0 +1,111 @@
+---
+// Portal home: greeting + counter cards (GET /me/counters). Only counters
+// whose blocks are enabled are requested.
+import config from 'virtual:odusite/config';
+import Card from '@theme/Card.astro';
+import PortalLayout from '../../components/PortalLayout.astro';
+import { loginRedirect, portalApi } from '../../lib';
+import type { Counters, MeProfile } from '../../types';
+
+export const prerender = false;
+if (!Astro.locals.user) return loginRedirect(Astro);
+
+interface Section {
+  key: string;
+  label: string;
+  href: string;
+  description: string;
+}
+const sections: Section[] = [
+  ...(config.blocks.shop
+    ? [
+        { key: 'orders', label: 'Orders', href: '/portal/orders', description: 'Confirmed sales orders' },
+        { key: 'quotes', label: 'Quotations', href: '/portal/quotes', description: 'Quotations awaiting your review' },
+      ]
+    : []),
+  { key: 'invoices', label: 'Invoices', href: '/portal/invoices', description: 'Invoices and credit notes' },
+  { key: 'projects', label: 'Projects', href: '/portal/projects', description: 'Projects shared with you' },
+  { key: 'tasks', label: 'Tasks', href: '/portal/tasks', description: 'Tasks across your projects' },
+];
+
+let profile: MeProfile | null = null;
+const me = await portalApi<MeProfile>(Astro, '/me');
+if (me instanceof Response) return me;
+profile = me;
+
+let counters: Counters = {};
+try {
+  const result = await portalApi<Counters>(Astro, '/me/counters', {
+    query: { counters: sections.map((s) => s.key).join(',') },
+  });
+  if (result instanceof Response) return result;
+  counters = result ?? {};
+} catch {
+  // Counter registry unavailable (e.g. optional module missing) — show dashes.
+}
+
+const greetingName = profile?.name || Astro.locals.user?.name || 'there';
+---
+
+<PortalLayout title="Home" active="home">
+  <header class="home__head">
+    <h1>Hello, {greetingName}</h1>
+    <p class="home__sub">Here is what's happening with your account.</p>
+  </header>
+
+  <div class="home__grid">
+    {sections.map((section) => (
+      <Card href={section.href} class="home__card">
+        <span class="home__count od-mono">{counters[section.key] ?? '—'}</span>
+        <span class="home__label">{section.label}</span>
+        <span class="home__desc">{section.description}</span>
+      </Card>
+    ))}
+  </div>
+
+  <div class="home__grid home__grid--secondary">
+    <Card href="/portal/account" class="home__card">
+      <span class="home__label">Account</span>
+      <span class="home__desc">Contact details and billing address</span>
+    </Card>
+    <Card href="/portal/addresses" class="home__card">
+      <span class="home__label">Addresses</span>
+      <span class="home__desc">Billing and delivery address book</span>
+    </Card>
+    <Card href="/portal/security" class="home__card">
+      <span class="home__label">Security</span>
+      <span class="home__desc">Password and active sessions</span>
+    </Card>
+  </div>
+</PortalLayout>
+
+<style>
+  .home__head { margin-bottom: var(--od-space-6); }
+  .home__head h1 { margin-bottom: var(--od-space-1); }
+  .home__sub { color: var(--od-fg-subtle); margin: 0; }
+  .home__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: var(--od-space-4);
+    margin-bottom: var(--od-space-5);
+  }
+  .home__grid :global(.home__card) {
+    display: flex;
+    flex-direction: column;
+    gap: var(--od-space-1);
+  }
+  .home__count {
+    font-size: var(--od-text-2xl);
+    font-weight: 650;
+    color: var(--od-fg);
+  }
+  .home__label {
+    font-weight: 600;
+    color: var(--od-fg);
+    font-size: var(--od-text-sm);
+  }
+  .home__desc {
+    font-size: var(--od-text-xs);
+    color: var(--od-fg-subtle);
+  }
+</style>

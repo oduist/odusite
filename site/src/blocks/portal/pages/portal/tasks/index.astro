@@ -1,0 +1,170 @@
+---
+// Portal tasks: GET /my/tasks with project / state / search filters.
+import Badge from '@theme/Badge.astro';
+import Button from '@theme/Button.astro';
+import EmptyState from '@theme/EmptyState.astro';
+import Pagination from '@components/Pagination.astro';
+import PortalLayout from '../../../components/PortalLayout.astro';
+import { formatDate, loginRedirect, portalApi, taskStateTone } from '../../../lib';
+import type { ApiListResult } from '@lib/api/client';
+import type { TaskListItem } from '../../../types';
+
+export const prerender = false;
+if (!Astro.locals.user) return loginRedirect(Astro);
+
+const params = Astro.url.searchParams;
+const page = Number(params.get('page') ?? '1') || 1;
+const state = params.get('state') ?? '';
+const search = params.get('search') ?? '';
+const project = params.get('project') ?? '';
+
+const result = await portalApi<ApiListResult<TaskListItem>>(Astro, '/my/tasks', {
+  query: {
+    page,
+    state: state || undefined,
+    search: search || undefined,
+    project: project || undefined,
+  },
+});
+if (result instanceof Response) return result;
+
+function filterHref(nextState: string): string {
+  const url = new URL(Astro.url);
+  url.searchParams.delete('page');
+  if (nextState) url.searchParams.set('state', nextState);
+  else url.searchParams.delete('state');
+  return url.pathname + url.search;
+}
+
+const FILTERS = [
+  { key: '', label: 'All' },
+  { key: 'open', label: 'Open' },
+  { key: 'closed', label: 'Closed' },
+];
+---
+
+<PortalLayout title="Tasks" active="projects">
+  <h1>Tasks</h1>
+
+  <div class="tasks__toolbar">
+    <nav class="tasks__filters" aria-label="Task filters">
+      {FILTERS.map((filter) => (
+        <a
+          href={filterHref(filter.key)}
+          class:list={['tasks__filter', { 'tasks__filter--active': state === filter.key }]}
+          aria-current={state === filter.key ? 'true' : undefined}
+        >{filter.label}</a>
+      ))}
+    </nav>
+    <form class="tasks__search" method="get" action="/portal/tasks">
+      {project && <input type="hidden" name="project" value={project} />}
+      {state && <input type="hidden" name="state" value={state} />}
+      <input
+        class="tasks__search-input"
+        type="search"
+        name="search"
+        value={search}
+        placeholder="Search tasks…"
+        aria-label="Search tasks"
+      />
+      <Button type="submit" variant="secondary" size="sm">Search</Button>
+    </form>
+  </div>
+
+  {result.data.length === 0 ? (
+    <EmptyState title="No tasks found" description="Try a different filter or search term." />
+  ) : (
+    <div class="tasks__scroll">
+      <table class="tasks__table">
+        <thead>
+          <tr>
+            <th>Task</th>
+            <th>Project</th>
+            <th>Stage</th>
+            <th>Deadline</th>
+            <th>Assignees</th>
+          </tr>
+        </thead>
+        <tbody>
+          {result.data.map((task) => (
+            <tr>
+              <td><a class="tasks__name" href={`/portal/tasks/${task.id}`}>{task.name}</a></td>
+              <td>{task.project?.name ?? '—'}</td>
+              <td>{task.stage ? <Badge tone={taskStateTone(task.state)}>{task.stage}</Badge> : '—'}</td>
+              <td>{formatDate(task.deadline)}</td>
+              <td class="tasks__assignees">{(task.assignees ?? []).join(', ') || '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )}
+  <Pagination meta={result.meta} url={Astro.url} />
+</PortalLayout>
+
+<style>
+  .tasks__toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--od-space-4);
+    flex-wrap: wrap;
+    margin-bottom: var(--od-space-5);
+  }
+  .tasks__filters { display: flex; gap: var(--od-space-2); }
+  .tasks__filter {
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-muted);
+    padding: var(--od-space-1) var(--od-space-3);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-full);
+    transition:
+      border-color var(--od-dur-fast) var(--od-ease),
+      color var(--od-dur-fast) var(--od-ease);
+  }
+  .tasks__filter:hover { border-color: var(--od-border-strong); color: var(--od-fg); }
+  .tasks__filter--active {
+    border-color: var(--od-accent);
+    color: var(--od-accent);
+    background: var(--od-accent-soft);
+  }
+  .tasks__search {
+    display: flex;
+    gap: var(--od-space-2);
+    margin: 0;
+  }
+  .tasks__search-input {
+    font: inherit;
+    font-size: var(--od-text-sm);
+    color: var(--od-fg);
+    background: var(--od-bg-inset);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-m);
+    padding: var(--od-space-1) var(--od-space-3);
+    min-width: 200px;
+  }
+  .tasks__search-input:focus { border-color: var(--od-accent); outline: none; }
+  .tasks__scroll { overflow-x: auto; }
+  .tasks__table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--od-text-sm);
+  }
+  .tasks__table th {
+    text-align: left;
+    font-size: var(--od-text-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: var(--od-tracking-wide);
+    color: var(--od-fg-subtle);
+    padding: var(--od-space-2) var(--od-space-3);
+    border-bottom: 1px solid var(--od-border-strong);
+  }
+  .tasks__table td {
+    padding: var(--od-space-3);
+    border-bottom: 1px solid var(--od-border);
+    color: var(--od-fg-muted);
+  }
+  .tasks__name { font-weight: 600; }
+  .tasks__assignees { color: var(--od-fg-subtle); }
+</style>

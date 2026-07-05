@@ -1,0 +1,137 @@
+---
+// /shop/[slug] — product detail: gallery, variant picker (combination
+// endpoint), add to cart, description, documents, alternatives/accessories.
+// Tags: shop, shop:<template id>. JSON-LD from the API payload (fallback
+// built locally).
+import Base from '@layouts/Base.astro';
+import Breadcrumb from '../components/Breadcrumb.astro';
+import Gallery from '../components/Gallery.astro';
+import VariantPicker from '../components/VariantPicker.astro';
+import ProductRail from '../components/ProductRail.astro';
+import { OdusiteApiError } from '@lib/api/client';
+import { fetchProduct, jsonScript } from '../lib';
+import type { ProductDetail } from '../types';
+
+export const prerender = false;
+
+const slug = Astro.params.slug ?? '';
+let product: ProductDetail;
+try {
+  product = await fetchProduct(Astro, slug);
+} catch (error) {
+  if (error instanceof OdusiteApiError && error.status === 404) return Astro.rewrite('/404');
+  throw error;
+}
+
+Astro.response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=600');
+Astro.response.headers.set('X-Odusite-Tags', `shop,shop:${product.id}`);
+
+const lang = Astro.locals.lang;
+const seo = product.seo ?? null;
+const images = product.images ?? [];
+const documents = product.documents ?? [];
+
+const jsonLd = product.jsonld ?? {
+  '@context': 'https://schema.org',
+  '@type': 'Product',
+  name: product.name,
+  image: images.map((image) => new URL(image.image, Astro.url.origin).toString()),
+  description: seo?.description ?? undefined,
+  offers: {
+    '@type': 'Offer',
+    price: product.combination.price,
+    priceCurrency: product.combination.currency,
+    url: new URL(`/shop/${product.slug}`, Astro.url.origin).toString(),
+    availability:
+      product.combination.is_combination_possible === false
+        ? 'https://schema.org/OutOfStock'
+        : 'https://schema.org/InStock',
+  },
+};
+---
+
+<Base
+  title={seo?.title || product.name}
+  description={seo?.description || undefined}
+  ogImage={seo?.og_image || images[0]?.image || null}
+  ogType="product"
+>
+  <script type="application/ld+json" slot="head" is:inline set:html={jsonScript(jsonLd)} />
+
+  <article class="od-container od-section">
+    <Breadcrumb items={[{ label: 'Shop', href: '/shop' }, { label: product.name }]} />
+
+    <div class="product">
+      <Gallery images={images} alt={product.name} fallback={product.combination.image} />
+      <div class="product__info">
+        <h1 class="product__name">{product.name}</h1>
+        <VariantPicker product={product} lang={lang} />
+        {documents.length > 0 && (
+          <section class="product__docs">
+            <h2>Documents</h2>
+            <ul>
+              {documents.map((doc) => (
+                <li>
+                  <a href={doc.url} target="_blank" rel="noopener">{doc.name}</a>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+      </div>
+    </div>
+
+    {product.description_html && (
+      <section class="product__desc">
+        <h2>Description</h2>
+        <div class="product__desc-html" set:html={product.description_html} />
+      </section>
+    )}
+
+    <ProductRail title="Alternatives" products={product.alternatives} lang={lang} />
+    <ProductRail title="Suggested accessories" products={product.accessories} lang={lang} />
+  </article>
+</Base>
+
+<style>
+  .product {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--od-space-7);
+    align-items: start;
+  }
+  @media (max-width: 800px) {
+    .product {
+      grid-template-columns: 1fr;
+    }
+  }
+  .product__name {
+    margin-bottom: var(--od-space-4);
+  }
+  .product__docs {
+    margin-top: var(--od-space-6);
+  }
+  .product__docs h2 {
+    font-size: var(--od-text-base);
+    margin-bottom: var(--od-space-2);
+  }
+  .product__docs ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--od-space-1);
+    font-size: var(--od-text-sm);
+  }
+  .product__desc {
+    margin-top: var(--od-space-8);
+    max-width: 72ch;
+  }
+  .product__desc h2 {
+    font-size: var(--od-text-xl);
+  }
+  .product__desc-html :global(img) {
+    border-radius: var(--od-radius-m);
+  }
+</style>

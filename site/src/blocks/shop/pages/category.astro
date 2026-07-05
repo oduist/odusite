@@ -1,0 +1,41 @@
+---
+// /shop/category/[slug] — the catalog grid scoped to one category, with a
+// breadcrumb built from the category tree. Tags: shop, shop-cat:<id>.
+import Base from '@layouts/Base.astro';
+import Breadcrumb from '../components/Breadcrumb.astro';
+import Catalog from '../components/Catalog.astro';
+import { catalogQueryFromUrl, fetchCategories, fetchProducts, findCategory } from '../lib';
+
+export const prerender = false;
+
+const slug = Astro.params.slug ?? '';
+const categories = await fetchCategories(Astro);
+const found = findCategory(categories, slug);
+if (!found) return Astro.rewrite('/404');
+
+const { category, trail } = found;
+const query = { ...catalogQueryFromUrl(Astro.url), category: category.id };
+const listing = await fetchProducts(Astro, query);
+
+Astro.response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=600');
+Astro.response.headers.set('X-Odusite-Tags', `shop,shop-cat:${category.id}`);
+
+const crumbs = [
+  { label: 'Shop', href: '/shop' },
+  ...trail.map((node) => ({ label: node.name, href: `/shop/category/${node.slug}` })),
+];
+---
+
+<Base title={`${category.name} — Shop`} description={`Browse ${category.name} products.`}>
+  <div class="od-container od-section">
+    <Breadcrumb items={crumbs} />
+    <h1>{category.name}</h1>
+    <Catalog
+      url={Astro.url}
+      listing={listing}
+      categories={categories}
+      activeCategoryId={category.id}
+      lang={Astro.locals.lang}
+    />
+  </div>
+</Base>

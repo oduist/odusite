@@ -1,0 +1,174 @@
+---
+import Base from '@layouts/Base.astro';
+import Badge from '@theme/Badge.astro';
+import { apiFetch, imgUrl, OdusiteApiError } from '@lib/api/client';
+import { TAGS_HEADER } from '@lib/cache';
+import type { PartnerDetail } from '../types';
+
+export const prerender = false;
+
+const slug = Astro.params.slug ?? '';
+let partner: PartnerDetail;
+try {
+  partner = await apiFetch<PartnerDetail>(Astro, `/partners/${slug}`, {
+    auth: false,
+    cart: false,
+  });
+} catch (error) {
+  if (error instanceof OdusiteApiError && error.status === 404) {
+    return Astro.rewrite('/404');
+  }
+  throw error;
+}
+
+// Odoo ships /web/image/... URLs inside the HTML — serve them via /img proxy.
+const descriptionHtml = (partner.description_html ?? '').replaceAll('/web/image', '/img');
+const logo = imgUrl(partner.logo);
+const location = [partner.city, partner.country].filter(Boolean).join(', ');
+
+let websiteLabel: string | null = null;
+if (partner.website) {
+  try {
+    websiteLabel = new URL(partner.website).hostname;
+  } catch {
+    websiteLabel = partner.website;
+  }
+}
+
+Astro.response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=600');
+Astro.response.headers.set(TAGS_HEADER, `partners,partners:${partner.id}`);
+---
+
+<Base
+  title={partner.seo?.title ?? partner.name}
+  description={partner.seo?.description ?? partner.short_description ?? undefined}
+>
+  <article class="od-section od-container">
+    <p class="partner-back"><a href="/partners">← All partners</a></p>
+
+    <header class="partner-head">
+      {logo && (
+        <div class="partner-head__logo">
+          <img src={logo} alt={`${partner.name} logo`} width="200" height="100" />
+        </div>
+      )}
+      <div class="partner-head__info">
+        <h1>{partner.name}</h1>
+        <div class="partner-head__chips">
+          {partner.grade && <Badge tone="accent">{partner.grade}</Badge>}
+          {location && <Badge>{location}</Badge>}
+          {partner.industry && <Badge tone="info">{partner.industry}</Badge>}
+          {(partner.tags ?? []).map((tag) => (
+            <Badge>{tag.name}</Badge>
+          ))}
+        </div>
+        {partner.website && websiteLabel && (
+          <a
+            class="partner-head__website"
+            href={partner.website}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Visit {websiteLabel} ↗
+          </a>
+        )}
+      </div>
+    </header>
+
+    {descriptionHtml && <div class="partner-description" set:html={descriptionHtml} />}
+
+    {(partner.references ?? []).length > 0 && (
+      <section class="partner-references" aria-label="Implemented references">
+        <h2>References</h2>
+        <ul class="partner-references__list">
+          {(partner.references ?? []).map((reference) => (
+            <li>
+              <a href={`/partners/${reference.slug}`}>{reference.name}</a>
+            </li>
+          ))}
+        </ul>
+      </section>
+    )}
+  </article>
+</Base>
+
+<style>
+  .partner-back {
+    font-size: var(--od-text-sm);
+    margin-bottom: var(--od-space-5);
+  }
+
+  .partner-head {
+    display: flex;
+    gap: var(--od-space-6);
+    align-items: flex-start;
+    flex-wrap: wrap;
+    margin-bottom: var(--od-space-7);
+  }
+  .partner-head__logo {
+    width: 200px;
+    min-height: 100px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--od-bg-raised);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-l);
+    padding: var(--od-space-4);
+  }
+  .partner-head__logo img {
+    max-width: 100%;
+    max-height: 100px;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+  }
+  .partner-head__info { flex: 1; min-width: 260px; }
+  .partner-head__chips {
+    display: flex;
+    gap: var(--od-space-2);
+    flex-wrap: wrap;
+    margin-bottom: var(--od-space-4);
+  }
+  .partner-head__website {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--od-space-2);
+    padding: var(--od-space-2) var(--od-space-4);
+    background: var(--od-bg-raised);
+    border: 1px solid var(--od-border-strong);
+    border-radius: var(--od-radius-m);
+    color: var(--od-fg);
+    font-size: var(--od-text-sm);
+    font-weight: 550;
+    transition: background var(--od-dur-fast) var(--od-ease);
+  }
+  .partner-head__website:hover { background: var(--od-bg-hover); color: var(--od-fg); }
+
+  .partner-description {
+    max-width: 72ch;
+    margin-bottom: var(--od-space-7);
+  }
+  .partner-description :global(img) { border-radius: var(--od-radius-m); }
+  .partner-description :global(ul),
+  .partner-description :global(ol) { color: var(--od-fg-muted); }
+
+  .partner-references__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--od-space-2);
+  }
+  .partner-references__list a {
+    display: inline-block;
+    padding: var(--od-space-2) var(--od-space-4);
+    background: var(--od-bg-raised);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-m);
+    color: var(--od-fg);
+    transition: border-color var(--od-dur-fast) var(--od-ease);
+  }
+  .partner-references__list a:hover { border-color: var(--od-border-strong); }
+</style>

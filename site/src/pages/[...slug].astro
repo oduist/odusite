@@ -1,0 +1,28 @@
+---
+import { getCollection, render } from 'astro:content';
+import Base from '@layouts/Base.astro';
+
+// SSR (not prerendered): the header carries user/cart state, so marketing
+// pages render on demand and rely on edge caching instead.
+export const prerender = false;
+
+const slug = Astro.params.slug ?? '';
+const pages = await getCollection('pages');
+const page = pages.find((entry) => entry.id.replace(/\.mdx?$/, '') === slug);
+if (!page) {
+  return Astro.rewrite('/404');
+}
+const { Content } = await render(page);
+---
+
+<Base title={page.data.title} description={page.data.description} ogImage={page.data.ogImage}>
+  <article class="od-section od-container od-prose">
+    <Content />
+  </article>
+</Base>
+
+<style>
+  .od-prose {
+    max-width: 72ch;
+  }
+</style>

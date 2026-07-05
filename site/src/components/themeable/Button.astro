@@ -1,0 +1,75 @@
+---
+interface Props {
+  href?: string;
+  type?: 'button' | 'submit';
+  variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
+  size?: 'sm' | 'md' | 'lg';
+  disabled?: boolean;
+  class?: string;
+}
+const {
+  href,
+  type = 'button',
+  variant = 'primary',
+  size = 'md',
+  disabled = false,
+  class: className = '',
+} = Astro.props;
+const Tag = href ? 'a' : 'button';
+---
+
+<Tag
+  class:list={['od-btn', `od-btn--${variant}`, `od-btn--${size}`, className]}
+  href={href}
+  type={href ? undefined : type}
+  disabled={href ? undefined : disabled}
+  aria-disabled={disabled ? 'true' : undefined}
+>
+  <slot />
+</Tag>
+
+<style>
+  .od-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--od-space-2);
+    border: 1px solid transparent;
+    border-radius: var(--od-radius-m);
+    font: inherit;
+    font-weight: 550;
+    cursor: pointer;
+    transition:
+      background var(--od-dur-fast) var(--od-ease),
+      border-color var(--od-dur-fast) var(--od-ease),
+      color var(--od-dur-fast) var(--od-ease);
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .od-btn--sm { padding: var(--od-space-1) var(--od-space-3); font-size: var(--od-text-sm); }
+  .od-btn--md { padding: var(--od-space-2) var(--od-space-4); font-size: var(--od-text-sm); }
+  .od-btn--lg { padding: var(--od-space-3) var(--od-space-5); font-size: var(--od-text-base); }
+
+  .od-btn--primary { background: var(--od-accent); color: var(--od-accent-fg); }
+  .od-btn--primary:hover { background: var(--od-accent-hover); color: var(--od-accent-fg); }
+  .od-btn--primary:active { background: var(--od-accent-active); }
+
+  .od-btn--secondary {
+    background: var(--od-bg-raised);
+    color: var(--od-fg);
+    border-color: var(--od-border-strong);
+  }
+  .od-btn--secondary:hover { background: var(--od-bg-hover); color: var(--od-fg); }
+
+  .od-btn--ghost { background: transparent; color: var(--od-fg-muted); }
+  .od-btn--ghost:hover { background: var(--od-bg-hover); color: var(--od-fg); }
+
+  .od-btn--danger { background: var(--od-danger-soft); color: var(--od-danger); border-color: transparent; }
+  .od-btn--danger:hover { border-color: var(--od-danger); color: var(--od-danger); }
+
+  .od-btn[disabled],
+  .od-btn[aria-disabled='true'] {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+</style>

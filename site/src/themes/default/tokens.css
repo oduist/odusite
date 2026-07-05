@@ -1,0 +1,77 @@
+/* Odusite theme "default" — design tokens (contract: specs/site/02-theming.md).
+   Every visual value used by components MUST come from these tokens. */
+:root,
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  /* Surfaces */
+  --od-bg: #0b0e14;
+  --od-bg-raised: #11151f;
+  --od-bg-inset: #070a10;
+  --od-bg-hover: #171c29;
+
+  /* Text */
+  --od-fg: #e6e9ef;
+  --od-fg-muted: #9aa3b5;
+  --od-fg-subtle: #6b7487;
+
+  /* Accent */
+  --od-accent: #7c86ff;
+  --od-accent-hover: #949cff;
+  --od-accent-active: #6a73e8;
+  --od-accent-fg: #0b0e14;
+  --od-accent-soft: rgba(124, 134, 255, 0.14);
+
+  /* Borders */
+  --od-border: #232838;
+  --od-border-strong: #333a4f;
+
+  /* Semantic */
+  --od-success: #4ade80;
+  --od-warning: #fbbf24;
+  --od-danger: #f87171;
+  --od-info: #60a5fa;
+  --od-success-soft: rgba(74, 222, 128, 0.12);
+  --od-warning-soft: rgba(251, 191, 36, 0.12);
+  --od-danger-soft: rgba(248, 113, 113, 0.12);
+  --od-info-soft: rgba(96, 165, 250, 0.12);
+
+  /* Typography */
+  --od-font-sans: ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --od-font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, Consolas, monospace;
+  --od-text-xs: 0.75rem;
+  --od-text-sm: 0.875rem;
+  --od-text-base: 1rem;
+  --od-text-lg: 1.125rem;
+  --od-text-xl: 1.375rem;
+  --od-text-2xl: 1.75rem;
+  --od-text-3xl: 2.25rem;
+  --od-leading: 1.6;
+  --od-tracking-wide: 0.04em;
+
+  /* Shape & space (4px scale) */
+  --od-radius-s: 6px;
+  --od-radius-m: 10px;
+  --od-radius-l: 16px;
+  --od-radius-full: 999px;
+  --od-space-1: 4px;
+  --od-space-2: 8px;
+  --od-space-3: 12px;
+  --od-space-4: 16px;
+  --od-space-5: 24px;
+  --od-space-6: 32px;
+  --od-space-7: 40px;
+  --od-space-8: 56px;
+  --od-space-9: 72px;
+  --od-space-10: 96px;
+  --od-shadow-s: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --od-shadow-m: 0 4px 16px rgba(0, 0, 0, 0.45);
+  --od-shadow-l: 0 12px 40px rgba(0, 0, 0, 0.55);
+  --od-container: 1200px;
+
+  /* Motion */
+  --od-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --od-dur-fast: 120ms;
+  --od-dur-base: 200ms;
+  --od-dur-slow: 320ms;
+}

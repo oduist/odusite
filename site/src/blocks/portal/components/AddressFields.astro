@@ -1,0 +1,136 @@
+---
+// Shared address fields (street/city/zip/country/state) with a
+// country-dependent state <select>. Used by the account and address forms.
+import Input from '@theme/Input.astro';
+import type { Country } from '../types';
+
+interface Props {
+  countries: Country[];
+  values: Record<string, string>;
+  errors?: Record<string, string>;
+}
+const { countries, values, errors = {} } = Astro.props;
+
+const countryId = values.country_id ?? '';
+const stateId = values.state_id ?? '';
+const selectedCountry = countries.find((c) => String(c.id) === countryId);
+const states = selectedCountry?.states ?? [];
+
+// Compact id → states payload for the client-side updater.
+const statesByCountry: Record<string, { id: number; name: string }[]> = {};
+for (const country of countries) {
+  if (country.states.length) {
+    statesByCountry[String(country.id)] = country.states.map((s) => ({ id: s.id, name: s.name }));
+  }
+}
+---
+
+<div class="od-addr" data-addr>
+  <Input label="Street" name="street" value={values.street ?? ''} error={errors.street} autocomplete="address-line1" />
+  <Input label="Street 2" name="street2" value={values.street2 ?? ''} error={errors.street2} autocomplete="address-line2" />
+  <div class="od-addr__row">
+    <Input label="City" name="city" value={values.city ?? ''} error={errors.city} autocomplete="address-level2" />
+    <Input label="ZIP" name="zip" value={values.zip ?? ''} error={errors.zip} autocomplete="postal-code" />
+  </div>
+  <div class="od-addr__row">
+    <div class="od-addr__field">
+      <label class="od-addr__label" for="field-country_id">Country</label>
+      <select
+        class:list={['od-addr__select', { 'od-addr__select--error': !!errors.country_id }]}
+        id="field-country_id"
+        name="country_id"
+        data-addr-country
+        autocomplete="country"
+      >
+        <option value="">—</option>
+        {countries.map((country) => (
+          <option value={String(country.id)} selected={String(country.id) === countryId}>{country.name}</option>
+        ))}
+      </select>
+      {errors.country_id && <p class="od-addr__error">{errors.country_id}</p>}
+    </div>
+    <div class="od-addr__field">
+      <label class="od-addr__label" for="field-state_id">State / Province</label>
+      <select
+        class:list={['od-addr__select', { 'od-addr__select--error': !!errors.state_id }]}
+        id="field-state_id"
+        name="state_id"
+        data-addr-state
+        disabled={states.length === 0}
+      >
+        <option value="">—</option>
+        {states.map((state) => (
+          <option value={String(state.id)} selected={String(state.id) === stateId}>{state.name}</option>
+        ))}
+      </select>
+      {errors.state_id && <p class="od-addr__error">{errors.state_id}</p>}
+    </div>
+  </div>
+  <script type="application/json" data-addr-states set:html={JSON.stringify(statesByCountry)} />
+</div>
+
+<script>
+  // Rebuild the state options when the country changes.
+  document.querySelectorAll<HTMLElement>('[data-addr]').forEach((root) => {
+    const country = root.querySelector<HTMLSelectElement>('[data-addr-country]');
+    const state = root.querySelector<HTMLSelectElement>('[data-addr-state]');
+    const payload = root.querySelector<HTMLScriptElement>('[data-addr-states]');
+    if (!country || !state || !payload) return;
+    let map: Record<string, { id: number; name: string }[]> = {};
+    try {
+      map = JSON.parse(payload.textContent ?? '{}');
+    } catch {
+      return;
+    }
+    country.addEventListener('change', () => {
+      const states = map[country.value] ?? [];
+      state.innerHTML = '<option value="">—</option>';
+      for (const item of states) {
+        const option = document.createElement('option');
+        option.value = String(item.id);
+        option.textContent = item.name;
+        state.appendChild(option);
+      }
+      state.disabled = states.length === 0;
+    });
+  });
+</script>
+
+<style>
+  .od-addr__row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--od-space-4);
+  }
+  @media (max-width: 560px) {
+    .od-addr__row { grid-template-columns: 1fr; }
+  }
+  .od-addr__field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--od-space-1);
+    margin-bottom: var(--od-space-4);
+  }
+  .od-addr__label {
+    font-size: var(--od-text-sm);
+    font-weight: 550;
+    color: var(--od-fg);
+  }
+  .od-addr__select {
+    font: inherit;
+    color: var(--od-fg);
+    background: var(--od-bg-inset);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-m);
+    padding: var(--od-space-2) var(--od-space-3);
+    transition: border-color var(--od-dur-fast) var(--od-ease);
+  }
+  .od-addr__select:focus { border-color: var(--od-accent); outline: none; }
+  .od-addr__select--error { border-color: var(--od-danger); }
+  .od-addr__select[disabled] { color: var(--od-fg-subtle); }
+  .od-addr__error {
+    margin: 0;
+    font-size: var(--od-text-xs);
+    color: var(--od-danger);
+  }
+</style>

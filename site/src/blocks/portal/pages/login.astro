@@ -1,0 +1,58 @@
+---
+// Sign-in page: plain form POST to /api/auth/login (no client JS).
+import Button from '@theme/Button.astro';
+import Input from '@theme/Input.astro';
+import AuthShell from '../components/AuthShell.astro';
+import Notice from '../components/Notice.astro';
+import { safePath } from '../lib';
+
+export const prerender = false;
+
+const next = safePath(Astro.url.searchParams.get('next'), '/portal');
+if (Astro.locals.user) return Astro.redirect(next, 303);
+
+const error = Astro.url.searchParams.get('error');
+const signedUp = Astro.url.searchParams.get('signup') === '1';
+const passwordReset = Astro.url.searchParams.get('reset') === '1';
+
+const errorMessages: Record<string, string> = {
+  credentials: 'Invalid email or password.',
+  mfa: 'This account requires two-factor authentication, which is not supported here yet. Please sign in through the backend.',
+  unknown: 'Something went wrong. Please try again.',
+};
+const errorMessage = error ? (errorMessages[error] ?? errorMessages.unknown) : null;
+
+const signupHref = next !== '/portal' ? `/signup?next=${encodeURIComponent(next)}` : '/signup';
+---
+
+<AuthShell title="Sign in" heading="Sign in" subtitle="Access your customer portal.">
+  {signedUp && <Notice tone="success">Account created. Sign in to continue.</Notice>}
+  {passwordReset && <Notice tone="success">Password updated. Sign in with your new password.</Notice>}
+  {errorMessage && <Notice tone="danger">{errorMessage}</Notice>}
+
+  <form method="post" action="/api/auth/login">
+    <input type="hidden" name="next" value={next} />
+    <Input label="Email" name="login" type="email" required autocomplete="email" placeholder="you@example.com" />
+    <Input label="Password" name="password" type="password" required autocomplete="current-password" />
+    <div class="login__actions">
+      <Button type="submit" size="lg" class="login__submit">Sign in</Button>
+    </div>
+  </form>
+
+  <div class="login__links">
+    <a href="/reset">Forgot password?</a>
+    <a href={signupHref}>Create an account</a>
+  </div>
+</AuthShell>
+
+<style>
+  .login__actions { margin-top: var(--od-space-2); }
+  :global(.login__submit) { width: 100%; }
+  .login__links {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--od-space-3);
+    margin-top: var(--od-space-5);
+    font-size: var(--od-text-sm);
+  }
+</style>

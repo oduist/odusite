@@ -1,0 +1,107 @@
+---
+// One course card in the catalog grid.
+import Badge from '@theme/Badge.astro';
+import Card from '@theme/Card.astro';
+import { imgUrl } from '@lib/api/client';
+import { formatDuration, ratingStars } from '../lib';
+import type { CourseListItem } from '../types';
+
+interface Props {
+  course: CourseListItem;
+}
+const { course } = Astro.props;
+const cover = imgUrl(course.cover);
+const duration = formatDuration(course.total_time);
+---
+
+<Card href={`/courses/${course.slug}`} padded={false} class="course-card">
+  <div class="course-card__cover">
+    {cover ? (
+      <img src={cover} alt="" loading="lazy" />
+    ) : (
+      <span class="course-card__cover-fallback" aria-hidden="true">🎓</span>
+    )}
+  </div>
+  <div class="course-card__body">
+    <div class="course-card__badges">
+      <Badge tone="accent">{course.channel_type}</Badge>
+      {course.is_member && <Badge tone="success">Enrolled</Badge>}
+      {course.enroll === 'invite' && <Badge tone="warning">Invite only</Badge>}
+      {course.enroll === 'payment' && <Badge tone="info">Paid</Badge>}
+    </div>
+    <h3 class="course-card__name">{course.name}</h3>
+    {course.description_short && <p class="course-card__desc">{course.description_short}</p>}
+    <p class="course-card__stats">
+      {duration && <span title="Total duration">{duration}</span>}
+      <span title="Enrolled members">{course.members_count} members</span>
+      {course.rating_avg > 0 && (
+        <span class="course-card__stars" title={`Rated ${course.rating_avg.toFixed(1)} out of 5`}>
+          {ratingStars(course.rating_avg)}
+        </span>
+      )}
+    </p>
+    {course.tags.length > 0 && (
+      <div class="course-card__tags">
+        {course.tags.map((tag) => <Badge tone="neutral">{tag.name}</Badge>)}
+      </div>
+    )}
+  </div>
+</Card>
+
+<style>
+  :global(.course-card) {
+    display: flex;
+    flex-direction: column;
+  }
+  .course-card__cover {
+    aspect-ratio: 16 / 9;
+    background: var(--od-bg-inset);
+    border-bottom: 1px solid var(--od-border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  .course-card__cover img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .course-card__cover-fallback { font-size: var(--od-text-3xl); }
+  .course-card__body {
+    padding: var(--od-space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--od-space-2);
+    flex: 1;
+  }
+  .course-card__badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--od-space-1);
+  }
+  .course-card__name { margin: 0; font-size: var(--od-text-lg); }
+  .course-card__desc {
+    margin: 0;
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-muted);
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .course-card__stats {
+    margin: auto 0 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--od-space-3);
+    font-size: var(--od-text-xs);
+    color: var(--od-fg-subtle);
+  }
+  .course-card__stars { color: var(--od-warning); letter-spacing: 2px; }
+  .course-card__tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--od-space-1);
+  }
+</style>

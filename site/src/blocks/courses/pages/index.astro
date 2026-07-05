@@ -1,0 +1,141 @@
+---
+// /courses — course catalog: cards, tag filter, search.
+import Base from '@layouts/Base.astro';
+import Button from '@theme/Button.astro';
+import EmptyState from '@theme/EmptyState.astro';
+import Input from '@theme/Input.astro';
+import Pagination from '@components/Pagination.astro';
+import { apiFetch, type ApiListResult } from '@lib/api/client';
+import CourseCard from '../components/CourseCard.astro';
+import type { CourseListItem, CourseTag } from '../types';
+
+export const prerender = false;
+
+const url = Astro.url;
+const tag = url.searchParams.get('tag') ?? undefined;
+const search = url.searchParams.get('search') ?? undefined;
+const page = Math.max(1, Number(url.searchParams.get('page') ?? '1') || 1);
+
+const courses = await apiFetch<ApiListResult<CourseListItem>>(Astro, '/courses', {
+  cart: false,
+  query: { tag, search, page },
+});
+
+// Tag chips: no dedicated tags endpoint — derive from the current result set,
+// keeping the active tag visible even when it filtered everything out.
+const tagMap = new Map<string, CourseTag>();
+for (const course of courses.data) {
+  for (const t of course.tags) tagMap.set(String(t.id), t);
+}
+const tags = [...tagMap.values()].sort((a, b) => a.name.localeCompare(b.name));
+
+function withParams(overrides: Record<string, string | null>): string {
+  const next = new URL(url);
+  next.searchParams.delete('page');
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === null) next.searchParams.delete(key);
+    else next.searchParams.set(key, value);
+  }
+  return next.pathname + next.search;
+}
+
+Astro.response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=300');
+Astro.response.headers.set('X-Odusite-Tags', 'courses');
+---
+
+<Base title="Courses" description="Learn at your own pace with our online courses.">
+  <section class="od-section od-container">
+    <header class="courses-head">
+      <div>
+        <h1>Courses</h1>
+        <p class="courses-head__desc">Learn at your own pace — videos, articles and quizzes.</p>
+      </div>
+      <form class="courses-search" method="get" action={url.pathname}>
+        {tag && <input type="hidden" name="tag" value={tag} />}
+        <Input label="Search" name="search" type="search" value={search ?? ''} placeholder="Search courses…" />
+        <Button type="submit" variant="secondary">Search</Button>
+      </form>
+    </header>
+
+    {(tags.length > 0 || tag) && (
+      <div class="courses-tags" aria-label="Filter by tag">
+        {tag && !tagMap.has(tag) && (
+          <a class="courses-tags__chip courses-tags__chip--active" href={withParams({ tag: null })} aria-pressed="true">
+            Clear tag filter ✕
+          </a>
+        )}
+        {tags.map((t) => (
+          <a
+            class:list={['courses-tags__chip', { 'courses-tags__chip--active': String(t.id) === tag }]}
+            href={String(t.id) === tag ? withParams({ tag: null }) : withParams({ tag: String(t.id) })}
+            aria-pressed={String(t.id) === tag ? 'true' : 'false'}
+          >
+            {t.group && <span class="courses-tags__group">{t.group}:</span>}
+            {t.name}
+          </a>
+        ))}
+      </div>
+    )}
+
+    {courses.data.length === 0 ? (
+      <EmptyState
+        title="No courses found"
+        description={search || tag
+          ? 'Try a different search or clear the tag filter.'
+          : 'New courses are being prepared — check back soon.'}
+      >
+        {(search || tag) && <Button href={url.pathname} variant="secondary">Reset filters</Button>}
+      </EmptyState>
+    ) : (
+      <div class="od-grid courses-grid">
+        {courses.data.map((course) => <CourseCard course={course} />)}
+      </div>
+    )}
+
+    <Pagination meta={courses.meta} url={url} />
+  </section>
+</Base>
+
+<style>
+  .courses-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: var(--od-space-4);
+    flex-wrap: wrap;
+    margin-bottom: var(--od-space-5);
+  }
+  .courses-head__desc { margin: 0; }
+  .courses-search {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--od-space-3);
+  }
+  .courses-search :global(.od-field) { margin-bottom: 0; }
+
+  .courses-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--od-space-2);
+    margin-bottom: var(--od-space-5);
+  }
+  .courses-tags__chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--od-space-1);
+    padding: 2px var(--od-space-3);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-full);
+    font-size: var(--od-text-xs);
+    color: var(--od-fg-muted);
+  }
+  .courses-tags__chip:hover { border-color: var(--od-border-strong); color: var(--od-fg); }
+  .courses-tags__chip--active {
+    background: var(--od-accent-soft);
+    border-color: var(--od-accent);
+    color: var(--od-accent);
+  }
+  .courses-tags__group { color: var(--od-fg-subtle); }
+
+  .courses-grid { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+</style>

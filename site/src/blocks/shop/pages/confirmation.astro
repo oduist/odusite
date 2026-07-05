@@ -1,0 +1,229 @@
+---
+// /checkout/confirmation — payment landing page.
+// The PaymentSheet returnUrl carries ?order=<id>; the provider redirect adds
+// ?tx=<id>&access_token=<cart token>. The page checks the transaction state
+// once server-side: done/authorized -> fetch the order confirmation, clear
+// the cart cookie (server-side) and render the summary; pending -> render a
+// client-side poller against /api/payment/transactions/<id> that reloads
+// when the state settles; error/cancel -> failure state with a way back.
+import Base from '@layouts/Base.astro';
+import Button from '@theme/Button.astro';
+import Card from '@theme/Card.astro';
+import EmptyState from '@theme/EmptyState.astro';
+import CartTotals from '../components/CartTotals.astro';
+import { apiFetch, OdusiteApiError } from '@lib/api/client';
+import { clearCartBinding, getCartBinding } from '@lib/auth/session';
+import { fetchOrderConfirmation, formatMoney } from '../lib';
+import type { OrderConfirmation, PaymentTransactionState } from '../types';
+
+export const prerender = false;
+
+const lang = Astro.locals.lang;
+const params = Astro.url.searchParams;
+const txId = params.get('tx');
+const binding = getCartBinding(Astro);
+const orderId = Number(params.get('order')) || binding?.id || null;
+const accessToken = params.get('access_token') || binding?.token || null;
+
+type Status = 'missing' | 'pending' | 'done' | 'error';
+let status: Status = 'missing';
+let stateMessage: string | null = null;
+let confirmation: OrderConfirmation | null = null;
+
+if (orderId && accessToken) {
+  if (txId) {
+    try {
+      const tx = await apiFetch<PaymentTransactionState>(
+        Astro,
+        `/payment/transactions/${encodeURIComponent(txId)}`,
+        { query: { access_token: accessToken } },
+      );
+      if (tx.state === 'done' || tx.state === 'authorized') {
+        status = 'done';
+      } else if (tx.state === 'error' || tx.state === 'cancel') {
+        status = 'error';
+        stateMessage = tx.state_message ?? null;
+      } else {
+        status = 'pending';
+      }
+    } catch (error) {
+      if (error instanceof OdusiteApiError) {
+        status = 'error';
+        stateMessage = error.message;
+      } else {
+        throw error;
+      }
+    }
+  } else {
+    // No transaction (zero-amount order confirmed without one): try the
+    // confirmation endpoint directly.
+    status = 'done';
+  }
+
+  if (status === 'done') {
+    try {
+      confirmation = await fetchOrderConfirmation(Astro, orderId, accessToken);
+      // The order is confirmed: drop the cart binding server-side so a new
+      // cart is created on the next add-to-cart.
+      if (binding && binding.id === orderId) clearCartBinding(Astro);
+    } catch (error) {
+      if (error instanceof OdusiteApiError) {
+        status = 'error';
+        stateMessage = error.message;
+      } else {
+        throw error;
+      }
+    }
+  }
+}
+
+const lines = (confirmation?.lines ?? []).filter((line) => !line.is_delivery && !line.is_reward);
+const amounts = confirmation?.amounts ?? null;
+const taxMode = confirmation?.tax_mode ?? 'excluded';
+---
+
+<Base title="Order confirmation" noindex>
+  <div class="od-container od-section confirm">
+    {status === 'missing' && (
+      <EmptyState
+        title="No order to confirm"
+        description="We could not find a payment to confirm. If you just paid, check your email for the order confirmation."
+      >
+        <Button href="/shop">Back to the shop</Button>
+      </EmptyState>
+    )}
+
+    {status === 'pending' && (
+      <div
+        class="confirm__pending"
+        data-poll
+        data-tx={txId}
+        data-access-token={accessToken}
+      >
+        <h1>Confirming your payment…</h1>
+        <p class="confirm__muted" data-poll-status>
+          This usually takes a few seconds. Please keep this page open.
+        </p>
+        <noscript>
+          <p>Refresh this page to check the payment status.</p>
+        </noscript>
+      </div>
+    )}
+
+    {status === 'error' && (
+      <EmptyState
+        title="Payment not completed"
+        description={stateMessage ?? 'The payment was cancelled or failed. You have not been charged.'}
+      >
+        <Button href="/checkout">Back to checkout</Button>
+      </EmptyState>
+    )}
+
+    {status === 'done' && confirmation && (
+      <div class="confirm__done">
+        <h1>Thank you for your order</h1>
+        <p class="confirm__lead">
+          Order <span class="od-mono">{confirmation.name}</span> is confirmed.
+          {confirmation.email && ` A confirmation email was sent to ${confirmation.email}.`}
+        </p>
+        <Card class="confirm__card">
+          {lines.length > 0 && amounts && (
+            <ul class="confirm__items">
+              {lines.map((line) => (
+                <li class="confirm__item">
+                  <span>
+                    {line.product?.name ?? line.description}
+                    <span class="confirm__qty od-mono"> × {line.quantity}</span>
+                  </span>
+                  <span class="od-mono">{formatMoney(line.price_total, amounts.currency, lang)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {amounts && <CartTotals amounts={amounts} taxMode={taxMode} lang={lang} />}
+        </Card>
+        <div class="confirm__actions">
+          <Button href="/shop" variant="secondary">Continue shopping</Button>
+        </div>
+      </div>
+    )}
+  </div>
+</Base>
+
+<script>
+  // Poll the transaction until it settles, then reload: the server-side
+  // render performs the confirmation fetch and clears the cart cookie.
+  const box = document.querySelector<HTMLElement>('[data-poll]');
+  if (box && box.dataset.tx && box.dataset.accessToken) {
+    const tx = box.dataset.tx;
+    const token = box.dataset.accessToken;
+    const statusEl = box.querySelector<HTMLElement>('[data-poll-status]');
+    let attempts = 0;
+    const timer = window.setInterval(async () => {
+      attempts += 1;
+      if (attempts > 60) {
+        window.clearInterval(timer);
+        if (statusEl) {
+          statusEl.textContent =
+            'This is taking longer than expected. Refresh the page to check again — your payment is safe.';
+        }
+        return;
+      }
+      try {
+        const response = await fetch(
+          `/api/payment/transactions/${encodeURIComponent(tx)}?access_token=${encodeURIComponent(token)}`,
+        );
+        if (!response.ok) return;
+        const payload = (await response.json()) as { data?: { state?: string } };
+        const state = payload.data?.state;
+        if (state && ['done', 'authorized', 'error', 'cancel'].includes(state)) {
+          window.clearInterval(timer);
+          window.location.reload();
+        }
+      } catch {
+        // Transient network error: keep polling.
+      }
+    }, 2000);
+  }
+</script>
+
+<style>
+  .confirm__pending,
+  .confirm__done {
+    max-width: 640px;
+    margin-inline: auto;
+    text-align: center;
+  }
+  .confirm__muted {
+    color: var(--od-fg-subtle);
+  }
+  .confirm__lead {
+    color: var(--od-fg-muted);
+    margin-bottom: var(--od-space-6);
+  }
+  .confirm__done :global(.confirm__card) {
+    text-align: left;
+  }
+  .confirm__items {
+    list-style: none;
+    margin: 0 0 var(--od-space-4);
+    padding: 0 0 var(--od-space-4);
+    border-bottom: 1px solid var(--od-border);
+    display: flex;
+    flex-direction: column;
+    gap: var(--od-space-2);
+  }
+  .confirm__item {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--od-space-3);
+    font-size: var(--od-text-sm);
+    color: var(--od-fg);
+  }
+  .confirm__qty {
+    color: var(--od-fg-subtle);
+  }
+  .confirm__actions {
+    margin-top: var(--od-space-6);
+  }
+</style>

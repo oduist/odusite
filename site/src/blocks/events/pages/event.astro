@@ -1,0 +1,490 @@
+---
+import Base from '@layouts/Base.astro';
+import Badge from '@theme/Badge.astro';
+import Button from '@theme/Button.astro';
+import Card from '@theme/Card.astro';
+import Hero from '@theme/Hero.astro';
+import Input from '@theme/Input.astro';
+import { apiFetch, imgUrl, OdusiteApiError } from '@lib/api/client';
+import {
+  formatEventRange,
+  formatMoney,
+  gcalDate,
+  rewriteImageUrls,
+  safeTimezone,
+} from '../lib/utils';
+import type { EventDetail, EventTicket } from '../types';
+
+export const prerender = false;
+
+const slug = Astro.params.slug ?? '';
+let event: EventDetail;
+try {
+  event = await apiFetch<EventDetail>(Astro, `/events/${slug}`, {
+    auth: false,
+    cart: false,
+  });
+} catch (error) {
+  if (error instanceof OdusiteApiError && error.status === 404) {
+    return Astro.rewrite('/404');
+  }
+  throw error;
+}
+
+Astro.response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=600');
+Astro.response.headers.set('X-Odusite-Tags', `events,events:${event.id}`);
+
+const description = rewriteImageUrls(event.description_html ?? '');
+const when = formatEventRange(event.date_begin, event.date_end, event.timezone);
+const location = [event.address?.city, event.address?.country].filter(Boolean).join(', ');
+const tickets = event.tickets ?? [];
+
+const now = Date.now();
+function onSale(ticket: EventTicket): boolean {
+  if (ticket.sale_start && now < new Date(ticket.sale_start).getTime()) return false;
+  if (ticket.sale_end && now > new Date(ticket.sale_end).getTime()) return false;
+  return true;
+}
+function ticketSoldOut(ticket: EventTicket): boolean {
+  return ticket.seats_available !== null && ticket.seats_available <= 0;
+}
+function maxQty(ticket: EventTicket): number {
+  return Math.min(ticket.seats_available ?? 9, 9);
+}
+
+const canRegister =
+  event.registrations_open &&
+  !event.seats.sold_out &&
+  tickets.some((ticket) => onSale(ticket) && !ticketSoldOut(ticket));
+
+const gcalParams: Record<string, string> = {
+  action: 'TEMPLATE',
+  text: event.name,
+  dates: `${gcalDate(event.date_begin)}/${gcalDate(event.date_end)}`,
+  ctz: safeTimezone(event.timezone),
+};
+if (location) gcalParams.location = location;
+if (event.subtitle) gcalParams.details = event.subtitle;
+const gcalUrl = `https://calendar.google.com/calendar/render?${new URLSearchParams(gcalParams)}`;
+
+const Tickets = canRegister ? 'form' : 'div';
+---
+
+<Base
+  title={event.seo?.title || event.name}
+  description={event.seo?.description || event.subtitle || undefined}
+  ogImage={event.seo?.og_image || event.cover}
+>
+  <Hero title={event.name} subtitle={event.subtitle ?? undefined} image={imgUrl(event.cover)}>
+    <div class="event-meta">
+      <p class="event-meta__when">{when}</p>
+      {location && <p class="event-meta__where">{location}</p>}
+      <div class="event-meta__badges">
+        {event.is_ongoing && <Badge tone="success">Ongoing</Badge>}
+        {event.is_done && <Badge tone="neutral">Past event</Badge>}
+        {event.seats.sold_out && <Badge tone="danger">Sold out</Badge>}
+        {event.tags.map((tag) => (
+          <a href={`/events?tag=${tag.slug}`}><Badge tone="accent">{tag.name}</Badge></a>
+        ))}
+      </div>
+      <div class="event-meta__cal">
+        <Button href={`/api/events/${event.id}/ics`} variant="secondary" size="sm">
+          Add to calendar (ICS)
+        </Button>
+        <Button href={gcalUrl} variant="ghost" size="sm">Google Calendar</Button>
+      </div>
+    </div>
+  </Hero>
+
+  <div class="od-section od-container event-layout">
+    <article class="event-desc" set:html={description} />
+
+    <aside class="event-aside">
+      <Card>
+        <h2 class="event-aside__title">Tickets</h2>
+
+        {tickets.length === 0 && (
+          <p class="event-note">No tickets are published for this event.</p>
+        )}
+
+        {tickets.length > 0 && (
+          <Tickets
+            id={canRegister ? 'event-register' : undefined}
+            data-event-id={canRegister ? String(event.id) : undefined}
+          >
+            <ul class="ticket-list">
+              {tickets.map((ticket) => {
+                const available = canRegister && onSale(ticket) && !ticketSoldOut(ticket);
+                return (
+                  <li class="ticket">
+                    <div class="ticket__info">
+                      <span class="ticket__name">{ticket.name}</span>
+                      {ticket.description && <span class="ticket__desc">{ticket.description}</span>}
+                      <span class="ticket__price od-mono">
+                        {ticket.is_free ? 'Free' : formatMoney(ticket.price, ticket.currency)}
+                      </span>
+                      {ticket.seats_available !== null &&
+                        ticket.seats_available > 0 &&
+                        ticket.seats_available <= 10 && (
+                          <span class="ticket__seats">{ticket.seats_available} left</span>
+                        )}
+                    </div>
+                    {available ? (
+                      <select
+                        class="ticket__qty"
+                        data-ticket-id={String(ticket.id)}
+                        data-ticket-name={ticket.name}
+                        aria-label={`Quantity — ${ticket.name}`}
+                      >
+                        {Array.from({ length: maxQty(ticket) + 1 }, (_, n) => (
+                          <option value={String(n)}>{n}</option>
+                        ))}
+                      </select>
+                    ) : ticketSoldOut(ticket) ? (
+                      <Badge tone="danger">Sold out</Badge>
+                    ) : !onSale(ticket) ? (
+                      <Badge tone="neutral">Not on sale</Badge>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+
+            {canRegister ? (
+              <>
+                <div class="attendees" id="attendees"></div>
+                <p class="register-msg" id="register-msg" role="alert" hidden></p>
+                <Button type="submit" class="register-submit">Register</Button>
+              </>
+            ) : (
+              <p class="event-note">
+                {event.seats.sold_out
+                  ? 'This event is sold out.'
+                  : event.is_done
+                    ? 'This event has ended.'
+                    : 'Registration is closed.'}
+              </p>
+            )}
+          </Tickets>
+        )}
+
+        {canRegister && (
+          <template id="attendee-template">
+            <fieldset class="attendee" data-ticket-id="">
+              <legend class="attendee__legend"></legend>
+              <Input label="Full name" name="attendee_name" required autocomplete="name" />
+              <Input label="Email" name="attendee_email" type="email" required autocomplete="email" />
+              <Input label="Phone" name="attendee_phone" type="tel" autocomplete="tel" />
+            </fieldset>
+          </template>
+        )}
+
+        {canRegister && (
+          <div class="register-success" id="register-success" hidden>
+            <p><strong>Registration confirmed.</strong></p>
+            <p>Check your inbox for the confirmation email.</p>
+          </div>
+        )}
+
+        {event.seats.limited && event.seats.available !== null && !event.seats.sold_out && (
+          <p class="event-seats">{event.seats.available} seats available</p>
+        )}
+
+        {event.organizer?.name && (
+          <p class="event-organizer">
+            Organized by <strong>{event.organizer.name}</strong>
+            {event.organizer.email && (
+              <>
+                {' — '}
+                <a href={`mailto:${event.organizer.email}`}>{event.organizer.email}</a>
+              </>
+            )}
+          </p>
+        )}
+      </Card>
+    </aside>
+  </div>
+</Base>
+
+<script>
+  // Free-ticket registration: quantity selects drive a repeated attendee
+  // fieldset (cloned from <template>); the payload is POSTed to the
+  // same-origin /api/events/register proxy — never to Odoo directly.
+  const form = document.getElementById('event-register');
+  if (form instanceof HTMLFormElement) {
+    const attendeesBox = document.getElementById('attendees');
+    const template = document.getElementById('attendee-template');
+    const message = document.getElementById('register-msg');
+    const success = document.getElementById('register-success');
+    const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+    const selects = Array.from(
+      form.querySelectorAll<HTMLSelectElement>('select[data-ticket-id]'),
+    );
+    let uid = 0;
+
+    const showMessage = (text: string) => {
+      if (!message) return;
+      message.textContent = text;
+      message.hidden = false;
+    };
+
+    const rebuild = () => {
+      if (!attendeesBox || !(template instanceof HTMLTemplateElement)) return;
+      attendeesBox.textContent = '';
+      for (const select of selects) {
+        const qty = Number(select.value) || 0;
+        for (let i = 1; i <= qty; i++) {
+          const clone = template.content.cloneNode(true) as DocumentFragment;
+          const fieldset = clone.querySelector('fieldset');
+          if (!fieldset) continue;
+          fieldset.dataset.ticketId = select.dataset.ticketId ?? '';
+          const legend = fieldset.querySelector('legend');
+          if (legend) legend.textContent = `${select.dataset.ticketName ?? 'Ticket'} — attendee ${i}`;
+          // Re-key input ids so cloned fieldsets keep unique id/label pairs.
+          uid += 1;
+          for (const input of fieldset.querySelectorAll('input')) {
+            const nextId = `${input.id}-${uid}`;
+            const label = fieldset.querySelector(`label[for="${input.id}"]`);
+            if (label) label.setAttribute('for', nextId);
+            input.id = nextId;
+          }
+          attendeesBox.append(fieldset);
+        }
+      }
+      if (message) message.hidden = true;
+    };
+
+    for (const select of selects) select.addEventListener('change', rebuild);
+
+    form.addEventListener('submit', async (submitEvent) => {
+      submitEvent.preventDefault();
+      if (!attendeesBox) return;
+
+      const byTicket = new Map<number, { name: string; email: string; phone: string }[]>();
+      for (const fieldset of attendeesBox.querySelectorAll('fieldset')) {
+        const ticketId = Number(fieldset.dataset.ticketId);
+        if (!ticketId) continue;
+        const value = (field: string) =>
+          fieldset
+            .querySelector<HTMLInputElement>(`input[name="attendee_${field}"]`)
+            ?.value.trim() ?? '';
+        const list = byTicket.get(ticketId) ?? [];
+        list.push({ name: value('name'), email: value('email'), phone: value('phone') });
+        byTicket.set(ticketId, list);
+      }
+
+      if (byTicket.size === 0) {
+        showMessage('Select at least one ticket to register.');
+        return;
+      }
+
+      const payload = {
+        event_id: Number(form.dataset.eventId),
+        tickets: Array.from(byTicket, ([ticket_id, attendees]) => ({ ticket_id, attendees })),
+      };
+
+      if (submit) submit.disabled = true;
+      try {
+        const response = await fetch('/api/events/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (response.ok) {
+          form.hidden = true;
+          if (success) success.hidden = false;
+        } else {
+          const body = (await response.json().catch(() => null)) as {
+            error?: { message?: string };
+          } | null;
+          showMessage(body?.error?.message ?? 'Registration failed. Please try again.');
+        }
+      } catch {
+        showMessage('Network error. Please try again.');
+      } finally {
+        if (submit) submit.disabled = false;
+      }
+    });
+  }
+</script>
+
+<style>
+  .event-meta__when {
+    margin: 0 0 var(--od-space-1);
+    font-size: var(--od-text-lg);
+    font-weight: 550;
+    color: var(--od-fg);
+  }
+  .event-meta__where {
+    margin: 0 0 var(--od-space-3);
+    color: var(--od-fg-muted);
+  }
+  .event-meta__badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--od-space-2);
+    margin-bottom: var(--od-space-4);
+  }
+  .event-meta__cal {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--od-space-2);
+  }
+
+  .event-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 380px;
+    gap: var(--od-space-7);
+    align-items: start;
+  }
+  @media (max-width: 900px) {
+    .event-layout {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .event-desc :global(img) {
+    border-radius: var(--od-radius-m);
+    margin-block: var(--od-space-5);
+  }
+  .event-desc :global(h2),
+  .event-desc :global(h3) {
+    margin-top: var(--od-space-6);
+  }
+  .event-desc :global(blockquote) {
+    margin: var(--od-space-5) 0;
+    padding: var(--od-space-1) var(--od-space-5);
+    border-left: 3px solid var(--od-accent);
+    color: var(--od-fg-muted);
+  }
+  .event-desc :global(table) {
+    border-collapse: collapse;
+    width: 100%;
+    margin-block: var(--od-space-5);
+  }
+  .event-desc :global(th),
+  .event-desc :global(td) {
+    border: 1px solid var(--od-border);
+    padding: var(--od-space-2) var(--od-space-3);
+  }
+
+  .event-aside {
+    position: sticky;
+    top: calc(60px + var(--od-space-4));
+  }
+  .event-aside__title {
+    font-size: var(--od-text-xl);
+    margin-bottom: var(--od-space-4);
+  }
+
+  .ticket-list {
+    list-style: none;
+    margin: 0 0 var(--od-space-4);
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--od-space-3);
+  }
+  .ticket {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--od-space-3);
+    padding: var(--od-space-3) var(--od-space-4);
+    background: var(--od-bg-inset);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-m);
+  }
+  .ticket__info {
+    display: flex;
+    flex-direction: column;
+    gap: var(--od-space-1);
+    min-width: 0;
+  }
+  .ticket__name {
+    font-weight: 600;
+    color: var(--od-fg);
+  }
+  .ticket__desc {
+    font-size: var(--od-text-xs);
+    color: var(--od-fg-subtle);
+  }
+  .ticket__price {
+    font-size: var(--od-text-sm);
+    color: var(--od-accent);
+  }
+  .ticket__seats {
+    font-size: var(--od-text-xs);
+    color: var(--od-warning);
+  }
+  .ticket__qty {
+    font: inherit;
+    color: var(--od-fg);
+    background: var(--od-bg-raised);
+    border: 1px solid var(--od-border-strong);
+    border-radius: var(--od-radius-m);
+    padding: var(--od-space-1) var(--od-space-2);
+  }
+  .ticket__qty:focus {
+    border-color: var(--od-accent);
+    outline: none;
+  }
+
+  .attendee {
+    margin: 0 0 var(--od-space-4);
+    padding: var(--od-space-4);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-m);
+  }
+  .attendee__legend {
+    padding-inline: var(--od-space-1);
+    font-size: var(--od-text-sm);
+    font-weight: 600;
+    color: var(--od-accent);
+  }
+
+  .register-msg {
+    margin: 0 0 var(--od-space-3);
+    font-size: var(--od-text-sm);
+    color: var(--od-danger);
+  }
+  .event-aside :global(.register-submit) {
+    width: 100%;
+  }
+  .register-success {
+    padding: var(--od-space-4);
+    background: var(--od-success-soft);
+    border: 1px solid var(--od-success);
+    border-radius: var(--od-radius-m);
+  }
+  .register-success p {
+    margin: 0;
+    color: var(--od-fg);
+  }
+  .register-success p + p {
+    margin-top: var(--od-space-1);
+    color: var(--od-fg-muted);
+    font-size: var(--od-text-sm);
+  }
+
+  .event-note {
+    margin: 0;
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-muted);
+  }
+  .event-seats {
+    margin: var(--od-space-3) 0 0;
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-subtle);
+  }
+  .event-organizer {
+    margin: var(--od-space-4) 0 0;
+    padding-top: var(--od-space-4);
+    border-top: 1px solid var(--od-border);
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-muted);
+  }
+  .event-organizer strong {
+    color: var(--od-fg);
+  }
+</style>

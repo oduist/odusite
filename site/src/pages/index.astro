@@ -1,0 +1,51 @@
+---
+import config from 'virtual:odusite/config';
+import Base from '@layouts/Base.astro';
+import Hero from '@theme/Hero.astro';
+import Card from '@theme/Card.astro';
+import Button from '@theme/Button.astro';
+import { getSiteConfig } from '@lib/api/base';
+
+export const prerender = false;
+
+const site = await getSiteConfig(Astro).catch(() => null);
+const name = site?.name ?? 'Odusite';
+const features = config.nav.slice(0, 6);
+---
+
+<Base title={name} description={`${name} — powered by Odoo + Astro`}>
+  <Hero
+    title={name}
+    subtitle="A fast, modular storefront and customer portal, rendered on the edge and backed by Odoo."
+    align="center"
+  >
+    <div class="home-cta">
+      {config.blocks.shop && <Button href="/shop" size="lg">Browse the shop</Button>}
+      {config.blocks.forms && <Button href="/contact" variant="secondary" size="lg">Contact us</Button>}
+    </div>
+  </Hero>
+
+  <section class="od-section od-container">
+    <div class="od-grid home-grid">
+      {features.map((item) => (
+        <Card href={item.href}>
+          <h3>{item.label}</h3>
+          <p>Explore {item.label.toLowerCase()} →</p>
+        </Card>
+      ))}
+    </div>
+  </section>
+</Base>
+
+<style>
+  .home-cta {
+    display: flex;
+    gap: var(--od-space-3);
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .home-grid {
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  }
+  .home-grid p { margin: 0; color: var(--od-fg-subtle); }
+</style>

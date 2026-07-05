@@ -1,0 +1,140 @@
+---
+// Customer portal shell: auth guard + sidebar navigation.
+// Pages using this layout are SSR and never cached (middleware marks
+// /portal/* as private, no-store).
+import config from 'virtual:odusite/config';
+import Base from '@layouts/Base.astro';
+
+interface Props {
+  title: string;
+  /** Active sidebar key: home|orders|quotes|invoices|projects|addresses|account|security */
+  active: string;
+}
+const { title, active } = Astro.props;
+
+const user = Astro.locals.user;
+if (!user) return Astro.redirect(`/login?next=${encodeURIComponent(Astro.url.pathname)}`, 303);
+
+interface Item {
+  key: string;
+  label: string;
+  href: string;
+}
+const items: Item[] = [
+  { key: 'home', label: 'Home', href: '/portal' },
+  ...(config.blocks.shop
+    ? [
+        { key: 'orders', label: 'Orders', href: '/portal/orders' },
+        { key: 'quotes', label: 'Quotations', href: '/portal/quotes' },
+      ]
+    : []),
+  { key: 'invoices', label: 'Invoices', href: '/portal/invoices' },
+  { key: 'projects', label: 'Projects & Tasks', href: '/portal/projects' },
+  { key: 'addresses', label: 'Addresses', href: '/portal/addresses' },
+  { key: 'account', label: 'Account', href: '/portal/account' },
+  { key: 'security', label: 'Security', href: '/portal/security' },
+];
+---
+
+<Base title={`${title} — Portal`} noindex>
+  <div class="od-container od-section portal">
+    <aside class="portal__side">
+      <nav class="portal__nav" aria-label="Portal">
+        {items.map((item) => (
+          <a
+            href={item.href}
+            class:list={['portal__link', { 'portal__link--active': item.key === active }]}
+            aria-current={item.key === active ? 'page' : undefined}
+          >{item.label}</a>
+        ))}
+      </nav>
+      <form class="portal__signout" method="post" action="/api/auth/logout">
+        <button class="portal__signout-btn" type="submit">Sign out</button>
+      </form>
+    </aside>
+    <section class="portal__main">
+      <slot />
+    </section>
+  </div>
+</Base>
+
+<style>
+  .portal {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    gap: var(--od-space-7);
+    align-items: start;
+    flex: 1;
+  }
+  .portal__side {
+    position: sticky;
+    top: calc(60px + var(--od-space-5));
+    display: flex;
+    flex-direction: column;
+    gap: var(--od-space-5);
+  }
+  .portal__nav {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .portal__link {
+    color: var(--od-fg-muted);
+    font-size: var(--od-text-sm);
+    font-weight: 500;
+    padding: var(--od-space-2) var(--od-space-3);
+    border-radius: var(--od-radius-s);
+    transition:
+      background var(--od-dur-fast) var(--od-ease),
+      color var(--od-dur-fast) var(--od-ease);
+  }
+  .portal__link:hover {
+    background: var(--od-bg-hover);
+    color: var(--od-fg);
+  }
+  .portal__link--active {
+    background: var(--od-accent-soft);
+    color: var(--od-accent);
+  }
+  .portal__signout {
+    margin: 0;
+    padding-top: var(--od-space-4);
+    border-top: 1px solid var(--od-border);
+  }
+  .portal__signout-btn {
+    font: inherit;
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-subtle);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: var(--od-space-2) var(--od-space-3);
+    border-radius: var(--od-radius-s);
+    transition: color var(--od-dur-fast) var(--od-ease);
+  }
+  .portal__signout-btn:hover { color: var(--od-danger); }
+
+  @media (max-width: 820px) {
+    .portal {
+      grid-template-columns: 1fr;
+      gap: var(--od-space-5);
+    }
+    .portal__side {
+      position: static;
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--od-space-3);
+    }
+    .portal__nav {
+      flex-direction: row;
+      overflow-x: auto;
+      gap: var(--od-space-1);
+    }
+    .portal__link { white-space: nowrap; }
+    .portal__signout {
+      border-top: none;
+      padding-top: 0;
+    }
+  }
+</style>

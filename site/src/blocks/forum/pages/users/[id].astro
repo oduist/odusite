@@ -1,0 +1,162 @@
+---
+// /forum/users/[id] — public forum profile: karma, badges, stats.
+import Base from '@layouts/Base.astro';
+import Card from '@theme/Card.astro';
+import EmptyState from '@theme/EmptyState.astro';
+import { apiFetch, imgUrl, OdusiteApiError } from '@lib/api/client';
+import { formatDate } from '../../lib';
+import type { ForumUserProfile } from '../../types';
+
+export const prerender = false;
+
+const id = Astro.params.id ?? '';
+if (!/^\d+$/.test(id)) return Astro.rewrite('/404');
+
+const lang = Astro.locals.lang?.split('_')[0] ?? 'en';
+
+let profile: ForumUserProfile;
+try {
+  profile = await apiFetch<ForumUserProfile>(Astro, `/forum/users/${id}`, {
+    auth: false,
+    cart: false,
+  });
+} catch (error) {
+  if (error instanceof OdusiteApiError && error.status === 404) return Astro.rewrite('/404');
+  throw error;
+}
+
+const avatar = imgUrl(profile.avatar);
+const stats = [
+  { label: 'Karma', value: profile.karma },
+  { label: 'Questions', value: profile.post_count },
+  { label: 'Answers', value: profile.answer_count },
+];
+
+Astro.response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=300');
+Astro.response.headers.set('X-Odusite-Tags', 'forum');
+---
+
+<Base title={`${profile.name} — Forum profile`} description={`Forum profile of ${profile.name}`}>
+  <section class="od-section od-container">
+    <nav class="profile__crumbs" aria-label="Breadcrumb">
+      <a href="/forum">Forum</a> <span aria-hidden="true">/</span> Profile
+    </nav>
+
+    <header class="profile__head">
+      {avatar ? (
+        <img class="profile__avatar" src={avatar} alt="" width="72" height="72" />
+      ) : (
+        <span class="profile__avatar profile__avatar--fallback" aria-hidden="true">
+          {profile.name.slice(0, 1).toUpperCase()}
+        </span>
+      )}
+      <div>
+        <h1 class="profile__name">{profile.name}</h1>
+        <p class="profile__joined">Member since {formatDate(profile.joined, lang)}</p>
+      </div>
+    </header>
+
+    <div class="profile__stats">
+      {stats.map((stat) => (
+        <Card class="profile__stat">
+          <span class="profile__stat-value od-mono">{stat.value}</span>
+          <span class="profile__stat-label">{stat.label}</span>
+        </Card>
+      ))}
+    </div>
+
+    <h2>Badges</h2>
+    {profile.badges.length === 0 ? (
+      <EmptyState title="No badges yet" description="Badges are earned by participating in the forum." />
+    ) : (
+      <div class="od-grid profile__badges">
+        {profile.badges.map((badge) => (
+          <Card class="profile__badge">
+            <span class:list={['profile__badge-dot', `profile__badge-dot--${badge.level}`]} aria-hidden="true"></span>
+            <span class="profile__badge-name">{badge.name}</span>
+            <span class="profile__badge-count od-mono" title={`Awarded ${badge.count} times`}>×{badge.count}</span>
+            <span class="profile__badge-level">{badge.level}</span>
+          </Card>
+        ))}
+      </div>
+    )}
+  </section>
+</Base>
+
+<style>
+  .profile__crumbs {
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-subtle);
+    margin-bottom: var(--od-space-3);
+  }
+  .profile__head {
+    display: flex;
+    align-items: center;
+    gap: var(--od-space-4);
+    margin-bottom: var(--od-space-6);
+  }
+  .profile__avatar {
+    width: 72px;
+    height: 72px;
+    border-radius: var(--od-radius-full);
+    object-fit: cover;
+    border: 1px solid var(--od-border-strong);
+    flex: none;
+  }
+  .profile__avatar--fallback {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--od-accent-soft);
+    color: var(--od-accent);
+    font-size: var(--od-text-2xl);
+    font-weight: 650;
+  }
+  .profile__name { margin-bottom: var(--od-space-1); }
+  .profile__joined { margin: 0; color: var(--od-fg-subtle); font-size: var(--od-text-sm); }
+
+  .profile__stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: var(--od-space-4);
+    margin-bottom: var(--od-space-7);
+  }
+  .profile__stats :global(.profile__stat) { text-align: center; }
+  .profile__stat-value {
+    display: block;
+    font-size: var(--od-text-2xl);
+    font-weight: 650;
+    color: var(--od-fg);
+  }
+  .profile__stat-label {
+    font-size: var(--od-text-xs);
+    letter-spacing: var(--od-tracking-wide);
+    text-transform: uppercase;
+    color: var(--od-fg-subtle);
+  }
+
+  .profile__badges { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+  .profile__badges :global(.profile__badge) {
+    display: flex;
+    align-items: center;
+    gap: var(--od-space-2);
+  }
+  .profile__badge-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: var(--od-radius-full);
+    flex: none;
+  }
+  .profile__badge-dot--gold { background: var(--od-warning); }
+  .profile__badge-dot--silver { background: var(--od-fg-muted); }
+  .profile__badge-dot--bronze { background: var(--od-danger); }
+  .profile__badge-name { font-weight: 550; color: var(--od-fg); }
+  .profile__badge-count { color: var(--od-fg-muted); font-size: var(--od-text-sm); }
+  .profile__badge-level {
+    margin-left: auto;
+    font-size: var(--od-text-xs);
+    letter-spacing: var(--od-tracking-wide);
+    text-transform: uppercase;
+    color: var(--od-fg-subtle);
+  }
+</style>

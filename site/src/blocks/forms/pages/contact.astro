@@ -1,0 +1,258 @@
+---
+import Base from '@layouts/Base.astro';
+import Button from '@theme/Button.astro';
+import Input from '@theme/Input.astro';
+import { getSiteConfig } from '@lib/api/base';
+import { getEnv } from '@lib/env';
+
+export const prerender = false;
+
+const site = await getSiteConfig(Astro).catch(() => null);
+const company = site?.company ?? null;
+const turnstileSiteKey = getEnv(Astro).PUBLIC_TURNSTILE_SITE_KEY;
+---
+
+<Base title="Contact us" description="Get in touch — we usually reply within one business day.">
+  {turnstileSiteKey && (
+    <script is:inline src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer
+    ></script>
+  )}
+
+  <section class="od-section od-container">
+    <header class="contact-head">
+      <h1>Contact us</h1>
+      <p>Tell us about your project or question — we usually reply within one business day.</p>
+    </header>
+
+    <div class="contact-layout">
+      <div class="contact-main">
+        <form id="contact-form">
+          <div class="contact-row">
+            <Input label="Name" name="name" required autocomplete="name" />
+            <Input label="Email" name="email" type="email" required autocomplete="email" />
+          </div>
+          <div class="contact-row">
+            <Input label="Phone" name="phone" type="tel" autocomplete="tel" />
+            <Input label="Company" name="company" autocomplete="organization" />
+          </div>
+          <Input label="Subject" name="subject" />
+          <Input
+            label="Message"
+            name="message"
+            textarea
+            rows={7}
+            required
+            placeholder="How can we help?"
+          />
+
+          <!-- Honeypot: humans never see or fill this; forwarded to Odoo,
+               which rejects submissions with a non-empty value. -->
+          <div class="contact-hp" aria-hidden="true">
+            <label for="website_hp">Website</label>
+            <input
+              id="website_hp"
+              type="text"
+              name="website_hp"
+              tabindex="-1"
+              autocomplete="off"
+            />
+          </div>
+
+          {turnstileSiteKey && (
+            <div class="cf-turnstile contact-turnstile" data-sitekey={turnstileSiteKey}></div>
+          )}
+
+          <p id="contact-error" class="contact-error" role="alert" hidden></p>
+          <Button type="submit">Send message</Button>
+          <noscript>
+            <p class="contact-noscript">JavaScript is required to submit this form.</p>
+          </noscript>
+        </form>
+
+        <div id="contact-success" class="contact-success" hidden>
+          <p class="contact-success__title">Message sent</p>
+          <p>Thank you for reaching out — we received your message and will reply shortly.</p>
+          <Button href="/" variant="secondary">Back to home</Button>
+        </div>
+      </div>
+
+      <aside class="contact-side" aria-label="Company contact details">
+        <h2 class="contact-side__title">Reach us directly</h2>
+        {company ? (
+          <address class="contact-side__card">
+            {company.name && <p class="contact-side__name">{company.name}</p>}
+            {(company.street || company.city) && (
+              <p>
+                {company.street}
+                {company.street2 && (
+                  <>
+                    <br />
+                    {company.street2}
+                  </>
+                )}
+                {(company.zip || company.city) && (
+                  <>
+                    <br />
+                    {[company.zip, company.city].filter(Boolean).join(' ')}
+                  </>
+                )}
+                {company.country && (
+                  <>
+                    <br />
+                    {company.country}
+                  </>
+                )}
+              </p>
+            )}
+            {company.email && (
+              <p>
+                <a href={`mailto:${company.email}`}>{company.email}</a>
+              </p>
+            )}
+            {company.phone && (
+              <p>
+                <a href={`tel:${company.phone.replace(/\s+/g, '')}`}>{company.phone}</a>
+              </p>
+            )}
+          </address>
+        ) : (
+          <p class="contact-side__fallback">
+            Use the form to get in touch — we will get back to you by email.
+          </p>
+        )}
+      </aside>
+    </div>
+  </section>
+</Base>
+
+<script>
+  // Submit the contact form as JSON to the same-origin endpoint; the Odusite
+  // token never reaches the browser (proxying happens server-side).
+  const form = document.getElementById('contact-form');
+  if (form instanceof HTMLFormElement) {
+    const errorBox = document.getElementById('contact-error');
+    const successBox = document.getElementById('contact-success');
+    const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+
+    const showError = (message: string): void => {
+      if (errorBox) {
+        errorBox.textContent = message;
+        errorBox.hidden = false;
+      }
+      // A consumed Turnstile token cannot be reused — reset for a retry.
+      const turnstile = (window as unknown as { turnstile?: { reset?: () => void } }).turnstile;
+      turnstile?.reset?.();
+    };
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (!form.reportValidity()) return;
+      if (errorBox) errorBox.hidden = true;
+      if (submit) submit.disabled = true;
+      try {
+        // Includes the hidden cf-turnstile-response input the widget injects.
+        const entries: Record<string, string> = {};
+        for (const [key, value] of new FormData(form).entries()) {
+          if (typeof value === 'string') entries[key] = value;
+        }
+        const response = await fetch('/api/forms/contact', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(entries),
+        });
+        const payload = (await response.json().catch(() => ({}))) as {
+          error?: { message?: string };
+        };
+        if (response.ok) {
+          form.hidden = true;
+          if (successBox) successBox.hidden = false;
+        } else {
+          showError(payload.error?.message ?? 'Could not send your message. Please try again.');
+        }
+      } catch {
+        showError('Network error. Please check your connection and try again.');
+      } finally {
+        if (submit) submit.disabled = false;
+      }
+    });
+  }
+</script>
+
+<style>
+  .contact-head { max-width: 60ch; }
+
+  .contact-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.6fr) minmax(260px, 1fr);
+    gap: var(--od-space-7);
+    align-items: start;
+    margin-top: var(--od-space-6);
+  }
+  @media (max-width: 800px) {
+    .contact-layout { grid-template-columns: 1fr; }
+  }
+
+  .contact-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--od-space-4);
+  }
+  @media (max-width: 560px) {
+    .contact-row { grid-template-columns: 1fr; }
+  }
+
+  /* Honeypot: visually removed but still present in the DOM for bots. */
+  .contact-hp {
+    position: absolute;
+    left: -9999px;
+    top: auto;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+  }
+
+  .contact-turnstile { margin-bottom: var(--od-space-4); }
+
+  .contact-error {
+    color: var(--od-danger);
+    font-size: var(--od-text-sm);
+    margin-bottom: var(--od-space-3);
+  }
+  .contact-noscript {
+    color: var(--od-warning);
+    font-size: var(--od-text-sm);
+    margin-top: var(--od-space-3);
+  }
+
+  .contact-success {
+    background: var(--od-bg-raised);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-l);
+    padding: var(--od-space-6);
+  }
+  .contact-success__title {
+    font-size: var(--od-text-lg);
+    font-weight: 600;
+    color: var(--od-success);
+    margin-bottom: var(--od-space-2);
+  }
+
+  .contact-side__title {
+    font-size: var(--od-text-lg);
+    margin-bottom: var(--od-space-3);
+  }
+  .contact-side__card {
+    font-style: normal;
+    background: var(--od-bg-raised);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-l);
+    padding: var(--od-space-5);
+  }
+  .contact-side__card p { margin-bottom: var(--od-space-3); }
+  .contact-side__card p:last-child { margin-bottom: 0; }
+  .contact-side__name {
+    font-weight: 600;
+    color: var(--od-fg);
+  }
+  .contact-side__fallback { color: var(--od-fg-subtle); }
+</style>

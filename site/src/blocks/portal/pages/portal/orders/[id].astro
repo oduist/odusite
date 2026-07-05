@@ -1,0 +1,446 @@
+---
+// Order / quotation detail: GET /my/orders/<id> — lines, totals, accept
+// (signature), decline, pay (PaymentSheet) and PDF download + chatter.
+import Badge from '@theme/Badge.astro';
+import Button from '@theme/Button.astro';
+import Card from '@theme/Card.astro';
+import Input from '@theme/Input.astro';
+import PaymentSheet from '@components/payment/PaymentSheet.astro';
+import PortalLayout from '../../../components/PortalLayout.astro';
+import Chatter from '../../../components/Chatter.astro';
+import Notice from '../../../components/Notice.astro';
+import {
+  formatDate,
+  formatMoney,
+  loginRedirect,
+  orderStateLabel,
+  orderStateTone,
+  portalApi,
+} from '../../../lib';
+import type { ApiListResult } from '@lib/api/client';
+import type { ChatterMessage, OrderDetail } from '../../../types';
+
+export const prerender = false;
+if (!Astro.locals.user) return loginRedirect(Astro);
+
+const id = Number(Astro.params.id);
+if (!Number.isInteger(id) || id <= 0) return await Astro.rewrite('/404');
+
+const order = await portalApi<OrderDetail>(Astro, `/my/orders/${id}`);
+if (order instanceof Response) return order;
+
+let messages: ChatterMessage[] = [];
+try {
+  const chatter = await portalApi<ApiListResult<ChatterMessage>>(
+    Astro,
+    `/chatter/sale.order/${id}/messages`,
+    { query: { limit: 30 } },
+  );
+  if (chatter instanceof Response) return chatter;
+  messages = chatter.data;
+} catch {
+  // Chatter unavailable — the document still renders.
+}
+
+const params = Astro.url.searchParams;
+const accepted = params.get('accepted') === '1';
+const declined = params.get('declined') === '1';
+const actionError = params.get('error');
+const paymentPending = params.has('tx');
+
+const currency = order.amounts?.currency ?? order.currency;
+const total = order.amounts?.total ?? order.amount_total;
+const payAmount = order.amount_due ?? total;
+const isQuote = order.state === 'sent' || order.state === 'draft';
+const backHref = isQuote ? '/portal/quotes' : '/portal/orders';
+const pagePath = `/portal/orders/${order.id}`;
+
+const deliveryLines = order.delivery_address
+  ? [
+      order.delivery_address.name,
+      order.delivery_address.street,
+      order.delivery_address.street2,
+      [order.delivery_address.zip, order.delivery_address.city].filter(Boolean).join(' '),
+      [order.delivery_address.state, order.delivery_address.country].filter(Boolean).join(', '),
+    ].filter((line): line is string => !!line)
+  : [];
+---
+
+<PortalLayout title={order.name} active={isQuote ? 'quotes' : 'orders'}>
+  <a class="order__back" href={backHref}>← Back to {isQuote ? 'quotations' : 'orders'}</a>
+
+  <header class="order__head">
+    <div>
+      <h1 class="order__title od-mono">{order.name}</h1>
+      <p class="order__meta">
+        Ordered {formatDate(order.date_order)}
+        {order.expected_date && ` · expected ${formatDate(order.expected_date)}`}
+      </p>
+    </div>
+    <div class="order__head-actions">
+      <Badge tone={orderStateTone(order.state)}>{orderStateLabel(order.state)}</Badge>
+      <Button href={`/api/portal/orders/${order.id}/pdf`} variant="secondary" size="sm">Download PDF</Button>
+    </div>
+  </header>
+
+  {accepted && <Notice tone="success">Thank you — the order has been signed and accepted.</Notice>}
+  {declined && <Notice tone="info">The quotation has been declined.</Notice>}
+  {actionError === 'sign' && <Notice tone="danger">The order could not be signed. Please try again.</Notice>}
+  {actionError === 'decline' && <Notice tone="danger">The quotation could not be declined. Please try again.</Notice>}
+  {paymentPending && (
+    <Notice tone="info">Payment received — we are confirming it with the payment provider. Refresh this page shortly.</Notice>
+  )}
+
+  <div class="order__scroll">
+    <table class="order__lines">
+      <thead>
+        <tr>
+          <th>Product</th>
+          <th class="order__num">Qty</th>
+          <th class="order__num">Unit price</th>
+          <th class="order__num">Subtotal</th>
+        </tr>
+      </thead>
+      <tbody>
+        {order.lines.map((line) => (
+          <tr>
+            <td>{line.name}</td>
+            <td class="order__num od-mono">{line.quantity}</td>
+            <td class="order__num od-mono">{formatMoney(line.price_unit, currency)}</td>
+            <td class="order__num od-mono">{formatMoney(line.price_subtotal, currency)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="order__totals">
+    {order.amounts?.untaxed !== undefined && (
+      <div class="order__total-row"><span>Untaxed</span><span class="od-mono">{formatMoney(order.amounts.untaxed, currency)}</span></div>
+    )}
+    {order.amounts?.delivery !== undefined && order.amounts.delivery > 0 && (
+      <div class="order__total-row"><span>Delivery</span><span class="od-mono">{formatMoney(order.amounts.delivery, currency)}</span></div>
+    )}
+    {order.amounts?.tax !== undefined && (
+      <div class="order__total-row"><span>Taxes</span><span class="od-mono">{formatMoney(order.amounts.tax, currency)}</span></div>
+    )}
+    <div class="order__total-row order__total-row--grand"><span>Total</span><span class="od-mono">{formatMoney(total, currency)}</span></div>
+  </div>
+
+  <div class="order__aside">
+    {deliveryLines.length > 0 && (
+      <Card class="order__panel">
+        <h2 class="order__panel-title">Delivery address</h2>
+        <address class="order__address">
+          {deliveryLines.map((line) => <span>{line}</span>)}
+        </address>
+      </Card>
+    )}
+    {(order.invoices ?? []).length > 0 && (
+      <Card class="order__panel">
+        <h2 class="order__panel-title">Invoices</h2>
+        <ul class="order__invoices">
+          {(order.invoices ?? []).map((invoice) => (
+            <li><a class="od-mono" href={`/portal/invoices/${invoice.id}`}>{invoice.name}</a></li>
+          ))}
+        </ul>
+      </Card>
+    )}
+  </div>
+
+  {order.can_accept && !accepted && (
+    <Card class="order__panel">
+      <h2 class="order__panel-title">Accept &amp; sign</h2>
+      <p class="order__hint">Review the quotation, then sign below to accept it.</p>
+      <form
+        class="sign"
+        method="post"
+        action={`/api/portal/orders/${order.id}/accept`}
+        data-sign-form
+      >
+        <Input label="Full name" name="name" required value={Astro.locals.user?.name ?? ''} autocomplete="name" />
+        <div class="sign__pad-wrap">
+          <span class="sign__label">Signature</span>
+          <canvas class="sign__pad" width="600" height="220" data-sign-pad></canvas>
+          <p class="sign__error" data-sign-error hidden>Please draw your signature before submitting.</p>
+        </div>
+        <input type="hidden" name="signature" data-sign-value />
+        <div class="sign__actions">
+          <Button type="button" variant="ghost" size="sm" class="sign__clear">Clear</Button>
+          <Button type="submit">Accept &amp; sign</Button>
+        </div>
+      </form>
+    </Card>
+  )}
+
+  {order.can_decline && !declined && (
+    <details class="order__decline">
+      <summary>Decline this quotation</summary>
+      <form method="post" action={`/api/portal/orders/${order.id}/decline`} class="decline__form">
+        <label class="decline__label" for="decline-reason">Tell us why (optional feedback for our team)</label>
+        <textarea class="decline__input" id="decline-reason" name="reason" rows="3" required></textarea>
+        <div class="decline__actions">
+          <Button type="submit" variant="danger">Decline quotation</Button>
+        </div>
+      </form>
+    </details>
+  )}
+
+  {order.requires_payment && !paymentPending && (
+    <Card class="order__panel">
+      <h2 class="order__panel-title">Payment</h2>
+      <PaymentSheet
+        document={`order:${order.id}`}
+        accessToken={order.access_token ?? ''}
+        returnUrl={pagePath}
+        amount={payAmount}
+        currency={currency ?? 'EUR'}
+      />
+    </Card>
+  )}
+
+  <Chatter model="sale.order" docId={order.id} messages={messages} returnPath={pagePath} />
+</PortalLayout>
+
+<script>
+  // Canvas signature pad: pointer drawing → base64 PNG in the hidden field.
+  document.querySelectorAll<HTMLFormElement>('[data-sign-form]').forEach((form) => {
+    const canvas = form.querySelector<HTMLCanvasElement>('[data-sign-pad]');
+    const value = form.querySelector<HTMLInputElement>('[data-sign-value]');
+    const error = form.querySelector<HTMLElement>('[data-sign-error]');
+    const clear = form.querySelector<HTMLButtonElement>('.sign__clear');
+    if (!canvas || !value) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let drawing = false;
+    let drawn = false;
+
+    const reset = () => {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.strokeStyle = '#1a1a2e';
+      ctx.lineWidth = 2.2;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      drawn = false;
+      value.value = '';
+    };
+
+    const point = (event: PointerEvent): [number, number] => {
+      const rect = canvas.getBoundingClientRect();
+      return [
+        ((event.clientX - rect.left) / rect.width) * canvas.width,
+        ((event.clientY - rect.top) / rect.height) * canvas.height,
+      ];
+    };
+
+    canvas.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      canvas.setPointerCapture(event.pointerId);
+      drawing = true;
+      const [x, y] = point(event);
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+    });
+    canvas.addEventListener('pointermove', (event) => {
+      if (!drawing) return;
+      const [x, y] = point(event);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+      drawn = true;
+    });
+    const stop = () => {
+      drawing = false;
+    };
+    canvas.addEventListener('pointerup', stop);
+    canvas.addEventListener('pointercancel', stop);
+
+    clear?.addEventListener('click', () => {
+      reset();
+      if (error) error.hidden = true;
+    });
+
+    form.addEventListener('submit', (event) => {
+      if (!drawn) {
+        event.preventDefault();
+        if (error) error.hidden = false;
+        return;
+      }
+      // "data:image/png;base64,<payload>" → raw base64 payload.
+      value.value = canvas.toDataURL('image/png').split(',')[1] ?? '';
+    });
+
+    reset();
+  });
+</script>
+
+<style>
+  .order__back {
+    display: inline-block;
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-subtle);
+    margin-bottom: var(--od-space-4);
+  }
+  .order__back:hover { color: var(--od-accent); }
+  .order__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--od-space-4);
+    flex-wrap: wrap;
+    margin-bottom: var(--od-space-5);
+  }
+  .order__title { margin-bottom: var(--od-space-1); }
+  .order__meta {
+    margin: 0;
+    color: var(--od-fg-subtle);
+    font-size: var(--od-text-sm);
+  }
+  .order__head-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--od-space-3);
+  }
+  .order__scroll { overflow-x: auto; }
+  .order__lines {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--od-text-sm);
+  }
+  .order__lines th {
+    text-align: left;
+    font-size: var(--od-text-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: var(--od-tracking-wide);
+    color: var(--od-fg-subtle);
+    padding: var(--od-space-2) var(--od-space-3);
+    border-bottom: 1px solid var(--od-border-strong);
+  }
+  .order__lines td {
+    padding: var(--od-space-3);
+    border-bottom: 1px solid var(--od-border);
+    color: var(--od-fg-muted);
+  }
+  .order__num { text-align: right; }
+  .order__totals {
+    display: flex;
+    flex-direction: column;
+    gap: var(--od-space-1);
+    align-items: flex-end;
+    padding: var(--od-space-4) var(--od-space-3);
+    margin-bottom: var(--od-space-5);
+  }
+  .order__total-row {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--od-space-7);
+    min-width: 240px;
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-muted);
+  }
+  .order__total-row--grand {
+    color: var(--od-fg);
+    font-weight: 650;
+    font-size: var(--od-text-base);
+    border-top: 1px solid var(--od-border-strong);
+    padding-top: var(--od-space-2);
+    margin-top: var(--od-space-1);
+  }
+  .order__aside {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: var(--od-space-4);
+    margin-bottom: var(--od-space-5);
+  }
+  :global(.order__panel) { margin-bottom: var(--od-space-5); }
+  .order__aside :global(.order__panel) { margin-bottom: 0; }
+  .order__panel-title { font-size: var(--od-text-lg); }
+  .order__address {
+    font-style: normal;
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-muted);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .order__invoices {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--od-space-1);
+    font-size: var(--od-text-sm);
+  }
+  .order__hint {
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-subtle);
+  }
+
+  .sign__pad-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: var(--od-space-1);
+    margin-bottom: var(--od-space-4);
+  }
+  .sign__label {
+    font-size: var(--od-text-sm);
+    font-weight: 550;
+  }
+  .sign__pad {
+    width: 100%;
+    max-width: 600px;
+    height: auto;
+    border: 1px solid var(--od-border-strong);
+    border-radius: var(--od-radius-m);
+    background: #fff;
+    cursor: crosshair;
+    touch-action: none;
+  }
+  .sign__error {
+    margin: 0;
+    font-size: var(--od-text-xs);
+    color: var(--od-danger);
+  }
+  .sign__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--od-space-2);
+  }
+
+  .order__decline {
+    margin-bottom: var(--od-space-5);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-m);
+    padding: var(--od-space-3) var(--od-space-4);
+  }
+  .order__decline summary {
+    cursor: pointer;
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-muted);
+  }
+  .order__decline summary:hover { color: var(--od-danger); }
+  .decline__form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--od-space-2);
+    padding-top: var(--od-space-3);
+  }
+  .decline__label {
+    font-size: var(--od-text-sm);
+    font-weight: 550;
+  }
+  .decline__input {
+    font: inherit;
+    color: var(--od-fg);
+    background: var(--od-bg-inset);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-m);
+    padding: var(--od-space-3);
+    resize: vertical;
+  }
+  .decline__input:focus { border-color: var(--od-accent); outline: none; }
+  .decline__actions { display: flex; justify-content: flex-end; }
+</style>

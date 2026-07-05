@@ -1,0 +1,347 @@
+---
+// /cart — SSR, never cached (middleware forces private, no-store).
+// Line list with quantity steppers posting to /api/shop/cart/update;
+// delivery/reward lines are shown read-only.
+import Base from '@layouts/Base.astro';
+import Button from '@theme/Button.astro';
+import Card from '@theme/Card.astro';
+import EmptyState from '@theme/EmptyState.astro';
+import CartTotals from '../components/CartTotals.astro';
+import { imgUrl, OdusiteApiError } from '@lib/api/client';
+import { clearCartBinding, getCartBinding } from '@lib/auth/session';
+import { fetchCart, formatMoney } from '../lib';
+import type { Cart } from '../types';
+
+export const prerender = false;
+
+const lang = Astro.locals.lang;
+const binding = getCartBinding(Astro);
+let cart: Cart | null = null;
+
+if (binding) {
+  try {
+    cart = await fetchCart(Astro);
+  } catch (error) {
+    if (error instanceof OdusiteApiError && [401, 403, 404, 410].includes(error.status)) {
+      // Stale cookie (cart confirmed/deleted elsewhere): drop the binding.
+      clearCartBinding(Astro);
+    } else {
+      throw error;
+    }
+  }
+}
+
+const lines = cart?.lines ?? [];
+const productLines = lines.filter((line) => !line.is_delivery && !line.is_reward);
+const extraLines = lines.filter((line) => line.is_delivery || line.is_reward);
+const isEmpty = productLines.length === 0;
+const amounts = cart?.amounts ?? null;
+const taxMode = cart?.tax_mode ?? 'included';
+---
+
+<Base title="Cart" noindex>
+  <div class="od-container od-section">
+    <h1>Cart</h1>
+
+    {isEmpty ? (
+      <EmptyState title="Your cart is empty" description="Find something you like in the shop.">
+        <Button href="/shop">Browse the shop</Button>
+      </EmptyState>
+    ) : (
+      amounts && (
+        <div class="cart">
+          <ul class="cart__lines">
+            {productLines.map((line) => (
+              <li class="cart__line" data-cart-line data-line-id={line.id}>
+                <a
+                  class="cart__media"
+                  href={line.product ? `/shop/${line.product.slug}` : '/shop'}
+                >
+                  {line.product?.image ? (
+                    <img
+                      src={imgUrl(line.product.image)}
+                      alt={line.product.name}
+                      width="96"
+                      height="96"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <span class="cart__media-empty" aria-hidden="true"></span>
+                  )}
+                </a>
+                <div class="cart__details">
+                  <a class="cart__name" href={line.product ? `/shop/${line.product.slug}` : '/shop'}>
+                    {line.product?.name ?? line.description}
+                  </a>
+                  {line.description && line.product && (
+                    <p class="cart__desc">{line.description}</p>
+                  )}
+                  <p class="cart__unit od-mono">
+                    {formatMoney(line.price_unit, amounts.currency, lang)} each
+                  </p>
+                  <p class="cart__line-error" data-line-error hidden></p>
+                </div>
+                <div class="cart__qty" role="group" aria-label="Quantity">
+                  <button type="button" class="cart__step" data-qty-dec aria-label="Decrease quantity">−</button>
+                  <input
+                    class="cart__qty-input od-mono"
+                    data-qty-input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={line.quantity}
+                    inputmode="numeric"
+                    aria-label="Quantity"
+                  />
+                  <button type="button" class="cart__step" data-qty-inc aria-label="Increase quantity">+</button>
+                </div>
+                <p class="cart__subtotal od-mono">
+                  {formatMoney(line.price_subtotal, amounts.currency, lang)}
+                </p>
+                <button type="button" class="cart__remove" data-line-remove aria-label="Remove line">
+                  Remove
+                </button>
+              </li>
+            ))}
+            {extraLines.map((line) => (
+              <li class="cart__line cart__line--extra">
+                <div class="cart__details cart__details--extra">
+                  <span class="cart__name">{line.description || line.product?.name}</span>
+                  <span class="cart__extra-kind">{line.is_delivery ? 'Delivery' : 'Reward'}</span>
+                </div>
+                <p class="cart__subtotal od-mono">
+                  {formatMoney(line.price_subtotal, amounts.currency, lang)}
+                </p>
+              </li>
+            ))}
+          </ul>
+
+          <aside class="cart__aside">
+            <Card>
+              <h2 class="cart__summary-title">Summary</h2>
+              <CartTotals amounts={amounts} taxMode={taxMode} lang={lang} />
+              <div class="cart__checkout">
+                <Button href="/checkout" size="lg">Proceed to checkout</Button>
+              </div>
+            </Card>
+          </aside>
+        </div>
+      )
+    )}
+  </div>
+</Base>
+
+<script>
+  interface Envelope {
+    data?: unknown;
+    error?: { message?: string };
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-cart-line]').forEach((row) => {
+    const lineId = Number(row.dataset.lineId);
+    const input = row.querySelector<HTMLInputElement>('[data-qty-input]');
+    const errorEl = row.querySelector<HTMLElement>('[data-line-error]');
+
+    const current = (): number => Math.max(1, Math.floor(Number(input?.value ?? '1')) || 1);
+    const setBusy = (busy: boolean): void => {
+      row.querySelectorAll<HTMLButtonElement>('button').forEach((el) => (el.disabled = busy));
+      if (input) input.disabled = busy;
+    };
+
+    async function submit(quantity: number): Promise<void> {
+      if (errorEl) errorEl.hidden = true;
+      setBusy(true);
+      try {
+        const response = await fetch('/api/shop/cart/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ line_id: lineId, quantity }),
+        });
+        if (!response.ok) {
+          const payload = (await response.json().catch(() => null)) as Envelope | null;
+          if (errorEl) {
+            errorEl.textContent = payload?.error?.message ?? 'Could not update the cart.';
+            errorEl.hidden = false;
+          }
+          setBusy(false);
+          return;
+        }
+        // Totals, delivery and rewards are recomputed server-side: re-render.
+        window.location.reload();
+      } catch {
+        if (errorEl) {
+          errorEl.textContent = 'Could not update the cart. Please try again.';
+          errorEl.hidden = false;
+        }
+        setBusy(false);
+      }
+    }
+
+    row.querySelector('[data-qty-dec]')?.addEventListener('click', () => {
+      const next = current() - 1;
+      void submit(next < 1 ? 0 : next);
+    });
+    row.querySelector('[data-qty-inc]')?.addEventListener('click', () => {
+      void submit(current() + 1);
+    });
+    row.querySelector('[data-line-remove]')?.addEventListener('click', () => {
+      void submit(0);
+    });
+    input?.addEventListener('change', () => {
+      void submit(current());
+    });
+  });
+</script>
+
+<style>
+  .cart {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: var(--od-space-6);
+    align-items: start;
+  }
+  @media (max-width: 900px) {
+    .cart {
+      grid-template-columns: 1fr;
+    }
+  }
+  .cart__lines {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .cart__line {
+    display: grid;
+    grid-template-columns: 72px minmax(0, 1fr) auto auto auto;
+    gap: var(--od-space-4);
+    align-items: center;
+    padding: var(--od-space-4) 0;
+    border-bottom: 1px solid var(--od-border);
+  }
+  @media (max-width: 640px) {
+    .cart__line {
+      grid-template-columns: 72px minmax(0, 1fr);
+    }
+  }
+  .cart__line--extra {
+    grid-template-columns: minmax(0, 1fr) auto;
+    color: var(--od-fg-muted);
+  }
+  .cart__media {
+    display: block;
+    width: 72px;
+    height: 72px;
+    border-radius: var(--od-radius-m);
+    overflow: hidden;
+    background: var(--od-bg-inset);
+    border: 1px solid var(--od-border);
+  }
+  .cart__media img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .cart__media-empty {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+  .cart__details {
+    min-width: 0;
+  }
+  .cart__name {
+    color: var(--od-fg);
+    font-weight: 600;
+  }
+  .cart__name:hover {
+    color: var(--od-accent);
+  }
+  .cart__desc {
+    margin: var(--od-space-1) 0 0;
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-subtle);
+    white-space: pre-line;
+  }
+  .cart__unit {
+    margin: var(--od-space-1) 0 0;
+    font-size: var(--od-text-xs);
+    color: var(--od-fg-subtle);
+  }
+  .cart__extra-kind {
+    display: block;
+    font-size: var(--od-text-xs);
+    color: var(--od-fg-subtle);
+    text-transform: uppercase;
+    letter-spacing: var(--od-tracking-wide);
+  }
+  .cart__qty {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-m);
+    overflow: hidden;
+  }
+  .cart__step {
+    font: inherit;
+    color: var(--od-fg-muted);
+    background: transparent;
+    border: none;
+    width: 32px;
+    height: 34px;
+    cursor: pointer;
+  }
+  .cart__step:hover {
+    background: var(--od-bg-hover);
+    color: var(--od-fg);
+  }
+  .cart__qty-input {
+    width: 48px;
+    text-align: center;
+    font-size: var(--od-text-sm);
+    color: var(--od-fg);
+    background: var(--od-bg-inset);
+    border: none;
+    border-inline: 1px solid var(--od-border);
+    height: 34px;
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+  .cart__qty-input:focus {
+    outline: none;
+    background: var(--od-bg-raised);
+  }
+  .cart__subtotal {
+    margin: 0;
+    color: var(--od-fg);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .cart__remove {
+    font: inherit;
+    font-size: var(--od-text-xs);
+    color: var(--od-fg-subtle);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: var(--od-space-1);
+  }
+  .cart__remove:hover {
+    color: var(--od-danger);
+  }
+  .cart__line-error {
+    margin: var(--od-space-1) 0 0;
+    font-size: var(--od-text-xs);
+    color: var(--od-danger);
+  }
+  .cart__summary-title {
+    font-size: var(--od-text-lg);
+    margin-bottom: var(--od-space-4);
+  }
+  .cart__checkout {
+    margin-top: var(--od-space-5);
+    display: flex;
+    flex-direction: column;
+  }
+</style>

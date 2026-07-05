@@ -1,0 +1,30 @@
+---
+interface Props {
+  title: string;
+  description?: string;
+}
+const { title, description } = Astro.props;
+---
+
+<div class="od-empty">
+  <p class="od-empty__title">{title}</p>
+  {description && <p class="od-empty__desc">{description}</p>}
+  <slot />
+</div>
+
+<style>
+  .od-empty {
+    text-align: center;
+    padding: var(--od-space-9) var(--od-space-5);
+    border: 1px dashed var(--od-border-strong);
+    border-radius: var(--od-radius-l);
+    color: var(--od-fg-muted);
+  }
+  .od-empty__title {
+    font-size: var(--od-text-lg);
+    font-weight: 600;
+    color: var(--od-fg);
+    margin-bottom: var(--od-space-2);
+  }
+  .od-empty__desc { margin: 0 0 var(--od-space-4); }
+</style>

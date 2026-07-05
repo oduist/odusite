@@ -1,0 +1,193 @@
+---
+// Address book: GET /me/addresses + add/edit/archive via the
+// /api/portal/addresses form proxy.
+import Badge from '@theme/Badge.astro';
+import Button from '@theme/Button.astro';
+import Card from '@theme/Card.astro';
+import EmptyState from '@theme/EmptyState.astro';
+import Input from '@theme/Input.astro';
+import PortalLayout from '../../components/PortalLayout.astro';
+import AddressFields from '../../components/AddressFields.astro';
+import Notice from '../../components/Notice.astro';
+import { apiFetch } from '@lib/api/client';
+import { loginRedirect, portalApi, unpackFormError } from '../../lib';
+import type { Country, PortalAddress } from '../../types';
+
+export const prerender = false;
+if (!Astro.locals.user) return loginRedirect(Astro);
+
+const addresses = await portalApi<PortalAddress[]>(Astro, '/me/addresses');
+if (addresses instanceof Response) return addresses;
+
+const params = Astro.url.searchParams;
+const saved = params.get('saved') === '1';
+const archived = params.get('archived') === '1';
+const formError = unpackFormError(params.get('err'));
+
+const addType = params.get('add');
+const editId = params.get('edit');
+const editing = editId ? addresses.find((a) => String(a.id) === editId) : undefined;
+const showForm = addType === 'billing' || addType === 'delivery' || !!editing;
+
+let countries: Country[] = [];
+if (showForm) {
+  try {
+    countries = await apiFetch<Country[]>(Astro, '/countries', { auth: false, cart: false });
+  } catch {
+    // Country list unavailable — the selects render empty.
+  }
+}
+
+const formType = editing?.address_type ?? (addType === 'delivery' ? 'delivery' : 'billing');
+const values: Record<string, string> = formError?.values ?? {
+  name: editing?.name ?? '',
+  phone: editing?.phone ?? '',
+  street: editing?.street ?? '',
+  street2: editing?.street2 ?? '',
+  city: editing?.city ?? '',
+  zip: editing?.zip ?? '',
+  country_id: editing?.country_id ? String(editing.country_id) : '',
+  state_id: editing?.state_id ? String(editing.state_id) : '',
+};
+const errors = formError?.fields ?? {};
+
+function formatLines(address: PortalAddress): string[] {
+  return [
+    address.street ?? '',
+    address.street2 ?? '',
+    [address.zip, address.city].filter(Boolean).join(' '),
+    [address.state, address.country].filter(Boolean).join(', '),
+  ].filter(Boolean);
+}
+---
+
+<PortalLayout title="Addresses" active="addresses">
+  <header class="addr__head">
+    <h1>Addresses</h1>
+    <div class="addr__add">
+      <Button href="/portal/addresses?add=billing" variant="secondary" size="sm">Add billing address</Button>
+      <Button href="/portal/addresses?add=delivery" variant="secondary" size="sm">Add delivery address</Button>
+    </div>
+  </header>
+
+  {saved && <Notice tone="success">Address saved.</Notice>}
+  {archived && <Notice tone="success">Address archived.</Notice>}
+  {formError && !showForm && <Notice tone="danger">{formError.message}</Notice>}
+
+  {showForm && (
+    <Card class="addr__form-card">
+      <h2 class="addr__form-title">{editing ? 'Edit address' : `New ${formType} address`}</h2>
+      {formError && <Notice tone="danger">{formError.message}</Notice>}
+      <form method="post" action="/api/portal/addresses">
+        <input type="hidden" name="action" value={editing ? 'update' : 'create'} />
+        {editing && <input type="hidden" name="id" value={String(editing.id)} />}
+        <input type="hidden" name="address_type" value={formType} />
+        <input
+          type="hidden"
+          name="return"
+          value={editing ? `/portal/addresses?edit=${editing.id}` : `/portal/addresses?add=${formType}`}
+        />
+        <div class="addr__row">
+          <Input label="Name" name="name" required value={values.name} error={errors.name} autocomplete="name" />
+          <Input label="Phone" name="phone" type="tel" value={values.phone} error={errors.phone} autocomplete="tel" />
+        </div>
+        <AddressFields countries={countries} values={values} errors={errors} />
+        <div class="addr__form-actions">
+          <Button href="/portal/addresses" variant="ghost">Cancel</Button>
+          <Button type="submit">{editing ? 'Save address' : 'Add address'}</Button>
+        </div>
+      </form>
+    </Card>
+  )}
+
+  {addresses.length === 0 && !showForm ? (
+    <EmptyState
+      title="No extra addresses"
+      description="Add billing or delivery addresses to use them at checkout."
+    />
+  ) : (
+    <div class="addr__grid">
+      {addresses.map((address) => (
+        <Card class="addr__card">
+          <div class="addr__card-head">
+            <span class="addr__name">{address.name || 'Unnamed'}</span>
+            <Badge tone={address.address_type === 'billing' ? 'accent' : 'info'}>
+              {address.address_type}
+            </Badge>
+          </div>
+          <address class="addr__lines">
+            {formatLines(address).map((line) => (
+              <span>{line}</span>
+            ))}
+            {address.phone && <span class="addr__phone">{address.phone}</span>}
+          </address>
+          <div class="addr__actions">
+            <Button href={`/portal/addresses?edit=${address.id}`} variant="secondary" size="sm">Edit</Button>
+            <form method="post" action="/api/portal/addresses">
+              <input type="hidden" name="action" value="archive" />
+              <input type="hidden" name="id" value={String(address.id)} />
+              <Button type="submit" variant="danger" size="sm">Archive</Button>
+            </form>
+          </div>
+        </Card>
+      ))}
+    </div>
+  )}
+</PortalLayout>
+
+<style>
+  .addr__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--od-space-3);
+    margin-bottom: var(--od-space-5);
+  }
+  .addr__head h1 { margin: 0; }
+  .addr__add { display: flex; gap: var(--od-space-2); flex-wrap: wrap; }
+  .addr__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: var(--od-space-4);
+  }
+  :global(.addr__form-card) { margin-bottom: var(--od-space-6); }
+  .addr__form-title { font-size: var(--od-text-lg); }
+  .addr__row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--od-space-4);
+  }
+  @media (max-width: 560px) {
+    .addr__row { grid-template-columns: 1fr; }
+  }
+  .addr__form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--od-space-2);
+    padding-top: var(--od-space-3);
+  }
+  .addr__card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--od-space-2);
+    margin-bottom: var(--od-space-3);
+  }
+  .addr__name { font-weight: 600; }
+  .addr__lines {
+    font-style: normal;
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-muted);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: var(--od-space-4);
+  }
+  .addr__phone { color: var(--od-fg-subtle); }
+  .addr__actions {
+    display: flex;
+    gap: var(--od-space-2);
+  }
+  .addr__actions form { margin: 0; }
+</style>

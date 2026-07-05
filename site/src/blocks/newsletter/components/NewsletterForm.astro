@@ -1,0 +1,143 @@
+---
+// Compact newsletter subscribe form, designed for the footer. Posts JSON to
+// the same-origin /api/newsletter/subscribe endpoint (odusite_mass_mailing);
+// anti-spam is the hidden honeypot field only — no Turnstile for this form.
+---
+
+<form class="od-newsletter" aria-label="Newsletter subscription">
+  <p class="od-newsletter__title">Newsletter</p>
+  <div class="od-newsletter__row">
+    <input
+      class="od-newsletter__input"
+      type="email"
+      name="email"
+      required
+      placeholder="you@example.com"
+      autocomplete="email"
+      aria-label="Email address"
+    />
+    <button class="od-newsletter__btn" type="submit">Subscribe</button>
+  </div>
+  <!-- Honeypot: humans never see or fill this; forwarded to Odoo, which
+       silently drops submissions with a non-empty value. -->
+  <div class="od-newsletter__hp" aria-hidden="true">
+    <label for="od-newsletter-hp">Website</label>
+    <input
+      id="od-newsletter-hp"
+      type="text"
+      name="website_hp"
+      tabindex="-1"
+      autocomplete="off"
+    />
+  </div>
+  <p class="od-newsletter__msg" role="status" hidden></p>
+</form>
+
+<script>
+  for (const form of document.querySelectorAll<HTMLFormElement>('form.od-newsletter')) {
+    const message = form.querySelector<HTMLElement>('.od-newsletter__msg');
+    const button = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+
+    const show = (text: string, ok: boolean): void => {
+      if (!message) return;
+      message.textContent = text;
+      message.classList.toggle('od-newsletter__msg--ok', ok);
+      message.classList.toggle('od-newsletter__msg--error', !ok);
+      message.hidden = false;
+    };
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (!form.reportValidity()) return;
+      if (message) message.hidden = true;
+      if (button) button.disabled = true;
+      try {
+        const entries: Record<string, string> = {};
+        for (const [key, value] of new FormData(form).entries()) {
+          if (typeof value === 'string') entries[key] = value;
+        }
+        const response = await fetch('/api/newsletter/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(entries),
+        });
+        const payload = (await response.json().catch(() => ({}))) as {
+          error?: { message?: string };
+        };
+        if (response.ok) {
+          form.reset();
+          show('Thanks for subscribing!', true);
+        } else {
+          show(payload.error?.message ?? 'Could not subscribe. Please try again.', false);
+        }
+      } catch {
+        show('Network error. Please try again.', false);
+      } finally {
+        if (button) button.disabled = false;
+      }
+    });
+  }
+</script>
+
+<style>
+  .od-newsletter__title {
+    font-weight: 700;
+    color: var(--od-fg);
+    margin-bottom: var(--od-space-2);
+  }
+  .od-newsletter__row {
+    display: flex;
+    gap: var(--od-space-2);
+  }
+  .od-newsletter__input {
+    flex: 1;
+    min-width: 0;
+    background: var(--od-bg-raised);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-m);
+    color: var(--od-fg);
+    font-size: var(--od-text-sm);
+    padding: var(--od-space-2) var(--od-space-3);
+  }
+  .od-newsletter__input::placeholder {
+    color: var(--od-fg-subtle);
+  }
+  .od-newsletter__btn {
+    background: var(--od-accent);
+    color: var(--od-accent-fg);
+    border: none;
+    border-radius: var(--od-radius-m);
+    font-size: var(--od-text-sm);
+    font-weight: 600;
+    padding: var(--od-space-2) var(--od-space-3);
+    cursor: pointer;
+    transition: background var(--od-dur-fast) var(--od-ease);
+  }
+  .od-newsletter__btn:hover {
+    background: var(--od-accent-hover);
+  }
+  .od-newsletter__btn:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+  /* Honeypot: visually removed but still present in the DOM for bots. */
+  .od-newsletter__hp {
+    position: absolute;
+    left: -9999px;
+    top: auto;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+  }
+  .od-newsletter__msg {
+    font-size: var(--od-text-xs);
+    margin-top: var(--od-space-2);
+    margin-bottom: 0;
+  }
+  .od-newsletter__msg--ok {
+    color: var(--od-success);
+  }
+  .od-newsletter__msg--error {
+    color: var(--od-danger);
+  }
+</style>

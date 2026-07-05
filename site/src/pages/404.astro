@@ -1,0 +1,15 @@
+---
+import Base from '@layouts/Base.astro';
+import Button from '@theme/Button.astro';
+import EmptyState from '@theme/EmptyState.astro';
+
+export const prerender = false;
+---
+
+<Base title="Page not found" noindex>
+  <div class="od-section od-container">
+    <EmptyState title="404 — page not found" description="The page you are looking for doesn't exist or was moved.">
+      <Button href="/">Back to home</Button>
+    </EmptyState>
+  </div>
+</Base>

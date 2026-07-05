@@ -1,0 +1,157 @@
+---
+// Security page: change password (PUT /me/password via proxy) + active
+// refresh-token sessions (GET /me/sessions) with revoke buttons.
+import Button from '@theme/Button.astro';
+import EmptyState from '@theme/EmptyState.astro';
+import Input from '@theme/Input.astro';
+import PortalLayout from '../../components/PortalLayout.astro';
+import Notice from '../../components/Notice.astro';
+import { formatDateTime, loginRedirect, portalApi, unpackFormError } from '../../lib';
+import type { SessionInfo } from '../../types';
+
+export const prerender = false;
+if (!Astro.locals.user) return loginRedirect(Astro);
+
+const sessions = await portalApi<SessionInfo[]>(Astro, '/me/sessions');
+if (sessions instanceof Response) return sessions;
+
+const params = Astro.url.searchParams;
+const changed = params.get('changed') === '1';
+const revoked = params.get('revoked') === '1';
+const mismatch = params.get('error') === 'mismatch';
+const formError = unpackFormError(params.get('err'));
+---
+
+<PortalLayout title="Security" active="security">
+  <h1>Security</h1>
+
+  <section class="sec__block">
+    <h2 class="sec__title">Change password</h2>
+    {changed && (
+      <Notice tone="success">
+        Password updated. All your other sessions have been signed out.
+      </Notice>
+    )}
+    {mismatch && <Notice tone="danger">The new passwords do not match.</Notice>}
+    {formError && <Notice tone="danger">{formError.message}</Notice>}
+    <form class="sec__form" method="post" action="/api/portal/password">
+      <Input
+        label="Current password"
+        name="old_password"
+        type="password"
+        required
+        autocomplete="current-password"
+        error={formError?.fields?.old_password}
+      />
+      <Input
+        label="New password"
+        name="new_password"
+        type="password"
+        required
+        autocomplete="new-password"
+        error={formError?.fields?.new_password}
+      />
+      <Input label="Confirm new password" name="confirm" type="password" required autocomplete="new-password" />
+      <div class="sec__actions">
+        <Button type="submit">Update password</Button>
+      </div>
+    </form>
+  </section>
+
+  <section class="sec__block">
+    <div class="sec__head">
+      <h2 class="sec__title">Active sessions</h2>
+      {sessions.length > 1 && (
+        <form method="post" action="/api/portal/sessions">
+          <input type="hidden" name="all" value="1" />
+          <Button type="submit" variant="danger" size="sm">Sign out everywhere</Button>
+        </form>
+      )}
+    </div>
+    {revoked && <Notice tone="success">Session revoked.</Notice>}
+    {sessions.length === 0 ? (
+      <EmptyState title="No active sessions" />
+    ) : (
+      <div class="sec__scroll">
+        <table class="sec__table">
+          <thead>
+            <tr>
+              <th>Device</th>
+              <th>IP</th>
+              <th>Last used</th>
+              <th>Expires</th>
+              <th><span class="sec__visually-hidden">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            {sessions.map((session) => (
+              <tr>
+                <td class="sec__ua" title={session.user_agent ?? undefined}>{session.user_agent || 'Unknown device'}</td>
+                <td class="od-mono">{session.ip || '—'}</td>
+                <td>{formatDateTime(session.last_used_at)}</td>
+                <td>{formatDateTime(session.expires_at)}</td>
+                <td class="sec__row-action">
+                  <form method="post" action="/api/portal/sessions">
+                    <input type="hidden" name="id" value={String(session.id)} />
+                    <Button type="submit" variant="ghost" size="sm">Revoke</Button>
+                  </form>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )}
+  </section>
+</PortalLayout>
+
+<style>
+  .sec__block { margin-bottom: var(--od-space-7); }
+  .sec__title { font-size: var(--od-text-lg); }
+  .sec__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--od-space-3);
+    flex-wrap: wrap;
+  }
+  .sec__head form { margin: 0 0 var(--od-space-4); }
+  .sec__form { max-width: 400px; }
+  .sec__actions { display: flex; justify-content: flex-end; }
+  .sec__scroll { overflow-x: auto; }
+  .sec__table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--od-text-sm);
+  }
+  .sec__table th {
+    text-align: left;
+    font-size: var(--od-text-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: var(--od-tracking-wide);
+    color: var(--od-fg-subtle);
+    padding: var(--od-space-2) var(--od-space-3);
+    border-bottom: 1px solid var(--od-border-strong);
+  }
+  .sec__table td {
+    padding: var(--od-space-2) var(--od-space-3);
+    border-bottom: 1px solid var(--od-border);
+    color: var(--od-fg-muted);
+  }
+  .sec__ua {
+    max-width: 320px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .sec__row-action { text-align: right; }
+  .sec__row-action form { margin: 0; }
+  .sec__visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+</style>

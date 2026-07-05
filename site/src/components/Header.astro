@@ -1,0 +1,104 @@
+---
+import config from 'virtual:odusite/config';
+import { getSiteConfig } from '@lib/api/base';
+import { imgUrl } from '@lib/api/client';
+
+const site = await getSiteConfig(Astro).catch(() => null);
+const logo = imgUrl(site?.logo);
+const user = Astro.locals.user;
+const showCart = config.blocks.shop;
+const showPortal = config.blocks.portal;
+const current = Astro.url.pathname;
+---
+
+<header class="od-header">
+  <div class="od-container od-header__inner">
+    <a class="od-header__brand" href="/">
+      {logo ? <img src={logo} alt={site?.name ?? 'Home'} height="28" /> : <span>{site?.name ?? 'Odusite'}</span>}
+    </a>
+    <nav class="od-header__nav" aria-label="Main">
+      {config.nav.map((item) => (
+        <a
+          href={item.href}
+          class:list={{ active: current === item.href || current.startsWith(item.href + '/') }}
+        >{item.label}</a>
+      ))}
+    </nav>
+    <div class="od-header__actions">
+      <a class="od-header__icon" href="/search" aria-label="Search">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+          <circle cx="11" cy="11" r="6.5"/>
+          <path d="m20 20-4.4-4.4"/>
+        </svg>
+      </a>
+      {showCart && (
+        <a class="od-header__icon" href="/cart" aria-label="Cart">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <circle cx="9" cy="20" r="1.6"/><circle cx="17" cy="20" r="1.6"/>
+            <path d="M3 4h2l2.4 11.2a1 1 0 0 0 1 .8h8.9a1 1 0 0 0 1-.76L20.5 8H6"/>
+          </svg>
+        </a>
+      )}
+      {showPortal && (
+        user
+          ? <a class="od-header__account" href="/portal">{user.name || 'Account'}</a>
+          : <a class="od-header__account" href="/login">Sign in</a>
+      )}
+    </div>
+  </div>
+</header>
+
+<style>
+  .od-header {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: color-mix(in srgb, var(--od-bg) 88%, transparent);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--od-border);
+  }
+  .od-header__inner {
+    display: flex;
+    align-items: center;
+    gap: var(--od-space-6);
+    min-height: 60px;
+  }
+  .od-header__brand {
+    font-weight: 700;
+    color: var(--od-fg);
+    font-size: var(--od-text-lg);
+    display: flex;
+    align-items: center;
+  }
+  .od-header__nav {
+    display: flex;
+    gap: var(--od-space-4);
+    flex: 1;
+    overflow-x: auto;
+  }
+  .od-header__nav a {
+    color: var(--od-fg-muted);
+    font-size: var(--od-text-sm);
+    font-weight: 500;
+    padding: var(--od-space-2) 0;
+    white-space: nowrap;
+  }
+  .od-header__nav a:hover { color: var(--od-fg); }
+  .od-header__nav a.active { color: var(--od-accent); }
+  .od-header__actions {
+    display: flex;
+    align-items: center;
+    gap: var(--od-space-4);
+  }
+  .od-header__icon { color: var(--od-fg-muted); display: flex; }
+  .od-header__icon:hover { color: var(--od-fg); }
+  .od-header__account {
+    font-size: var(--od-text-sm);
+    font-weight: 550;
+    color: var(--od-fg);
+    border: 1px solid var(--od-border-strong);
+    border-radius: var(--od-radius-full);
+    padding: var(--od-space-1) var(--od-space-4);
+  }
+  .od-header__account:hover { border-color: var(--od-accent); color: var(--od-accent); }
+</style>

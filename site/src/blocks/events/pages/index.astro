@@ -1,0 +1,151 @@
+---
+import Base from '@layouts/Base.astro';
+import Pagination from '@components/Pagination.astro';
+import Badge from '@theme/Badge.astro';
+import Button from '@theme/Button.astro';
+import EmptyState from '@theme/EmptyState.astro';
+import { apiFetch, type ApiListResult } from '@lib/api/client';
+import EventCard from '../components/EventCard.astro';
+import type { EventListItem, EventTag } from '../types';
+
+export const prerender = false;
+
+const url = Astro.url;
+const page = Math.max(1, Number(url.searchParams.get('page')) || 1);
+const period = url.searchParams.get('period') === 'past' ? 'past' : 'upcoming';
+const tag = url.searchParams.get('tag') || undefined;
+
+const events = await apiFetch<ApiListResult<EventListItem>>(Astro, '/events', {
+  query: { page, limit: 12, period, tag },
+  auth: false,
+  cart: false,
+});
+
+Astro.response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=600');
+Astro.response.headers.set('X-Odusite-Tags', 'events');
+
+// odusite_event v1 has no tags list endpoint — derive the tag filter from the
+// tags present in the current result set (plus the active tag).
+const tagMap = new Map<string, EventTag>();
+for (const event of events.data) {
+  for (const eventTag of event.tags) tagMap.set(eventTag.slug, eventTag);
+}
+const filterTags = [...tagMap.values()];
+
+function withParams(params: Record<string, string | undefined>): string {
+  const next = new URL(url);
+  next.searchParams.delete('page');
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined) next.searchParams.delete(key);
+    else next.searchParams.set(key, value);
+  }
+  return next.pathname + next.search;
+}
+---
+
+<Base title="Events" description="Upcoming and past events — meetups, webinars and conferences.">
+  <section class="od-section od-container">
+    <header class="events-head">
+      <div>
+        <h1>Events</h1>
+        <p class="events-head__sub">Meetups, webinars and conferences.</p>
+      </div>
+      <div class="events-toggle" role="group" aria-label="Filter by period">
+        <a
+          class:list={[{ active: period === 'upcoming' }]}
+          href={withParams({ period: undefined })}
+          aria-current={period === 'upcoming' ? 'page' : undefined}
+        >Upcoming</a>
+        <a
+          class:list={[{ active: period === 'past' }]}
+          href={withParams({ period: 'past' })}
+          aria-current={period === 'past' ? 'page' : undefined}
+        >Past</a>
+      </div>
+    </header>
+
+    {(filterTags.length > 0 || tag) && (
+      <nav class="events-tags" aria-label="Filter by tag">
+        <a href={withParams({ tag: undefined })}><Badge tone={tag ? 'neutral' : 'accent'}>All</Badge></a>
+        {filterTags.map((item) => (
+          <a href={withParams({ tag: item.slug })}>
+            <Badge tone={item.slug === tag ? 'accent' : 'neutral'}>{item.name}</Badge>
+          </a>
+        ))}
+        {tag && !tagMap.has(tag) && (
+          <a href={withParams({ tag })}><Badge tone="accent">{tag}</Badge></a>
+        )}
+      </nav>
+    )}
+
+    {events.data.length === 0 ? (
+      <EmptyState
+        title={period === 'past' ? 'No past events' : 'No upcoming events'}
+        description={tag
+          ? 'Try clearing the tag filter.'
+          : period === 'past'
+            ? 'Past events will appear here once they wrap up.'
+            : 'Check back soon — new events are on the way.'}
+      >
+        {tag ? (
+          <Button href={withParams({ tag: undefined })} variant="secondary">Clear filter</Button>
+        ) : (
+          period === 'upcoming' && (
+            <Button href={withParams({ period: 'past' })} variant="secondary">Browse past events</Button>
+          )
+        )}
+      </EmptyState>
+    ) : (
+      <div class="od-grid events-grid">
+        {events.data.map((event) => <EventCard event={event} />)}
+      </div>
+    )}
+
+    <Pagination meta={events.meta} url={url} />
+  </section>
+</Base>
+
+<style>
+  .events-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: var(--od-space-5);
+    flex-wrap: wrap;
+    margin-bottom: var(--od-space-5);
+  }
+  .events-head__sub {
+    margin: 0;
+    color: var(--od-fg-muted);
+  }
+  .events-toggle {
+    display: inline-flex;
+    gap: var(--od-space-1);
+    padding: var(--od-space-1);
+    border: 1px solid var(--od-border-strong);
+    border-radius: var(--od-radius-full);
+  }
+  .events-toggle a {
+    padding: var(--od-space-1) var(--od-space-4);
+    border-radius: var(--od-radius-full);
+    font-size: var(--od-text-sm);
+    font-weight: 550;
+    color: var(--od-fg-muted);
+  }
+  .events-toggle a:hover {
+    color: var(--od-fg);
+  }
+  .events-toggle a.active {
+    background: var(--od-accent);
+    color: var(--od-accent-fg);
+  }
+  .events-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--od-space-2);
+    margin-bottom: var(--od-space-6);
+  }
+  .events-grid {
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  }
+</style>

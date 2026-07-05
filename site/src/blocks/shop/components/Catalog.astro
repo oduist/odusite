@@ -1,0 +1,296 @@
+---
+// Shared catalog UI: sidebar (category tree, attribute facets, price range)
+// + toolbar (search, sort) + product grid + pagination. Used by /shop and
+// /shop/category/[slug].
+import Pagination from '@components/Pagination.astro';
+import Button from '@theme/Button.astro';
+import EmptyState from '@theme/EmptyState.astro';
+import ProductCard from './ProductCard.astro';
+import CategoryTree from './CategoryTree.astro';
+import { SORT_OPTIONS, toggleAttribUrl } from '../lib';
+import type { ApiListResult } from '@lib/api/client';
+import type { Facet, ProductListItem, ShopCategory } from '../types';
+
+interface Props {
+  url: URL;
+  listing: ApiListResult<ProductListItem>;
+  categories: ShopCategory[];
+  activeCategoryId?: number;
+  lang: string;
+}
+const { url, listing, categories, activeCategoryId, lang } = Astro.props;
+
+const params = url.searchParams;
+const action = url.pathname;
+const facetsRaw = listing.meta.facets;
+const facets: Facet[] = Array.isArray(facetsRaw) ? (facetsRaw as Facet[]) : [];
+const activeAttribs = (params.get('attribs') ?? '').split(',').filter(Boolean);
+const currentOrder = params.get('order') ?? 'relevance';
+
+/** Hidden inputs preserving other filters across the two GET forms. */
+const keep = (names: string[]) =>
+  names
+    .map((name) => ({ name, value: params.get(name) ?? '' }))
+    .filter((pair) => pair.value !== '');
+---
+
+<div class="catalog">
+  <aside class="catalog__side">
+    <nav class="catalog__block" aria-label="Categories">
+      <h2 class="catalog__side-title">Categories</h2>
+      <a class:list={['catalog__all', { active: !activeCategoryId }]} href="/shop">
+        All products
+      </a>
+      <CategoryTree categories={categories} activeId={activeCategoryId} />
+    </nav>
+
+    {facets.map((facet) => (
+      <section class="catalog__block">
+        <h2 class="catalog__side-title">{facet.name}</h2>
+        <ul class="catalog__facet">
+          {facet.values.map((value) => {
+            const token = `${facet.id}-${value.id}`;
+            const active = activeAttribs.includes(token);
+            return (
+              <li>
+                <a class:list={['catalog__facet-link', { active }]} href={toggleAttribUrl(url, token)}>
+                  <span>{value.name}</span>
+                  {typeof value.count === 'number' && (
+                    <span class="catalog__count">{value.count}</span>
+                  )}
+                </a>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+    ))}
+
+    <form class="catalog__block" method="get" action={action}>
+      <h2 class="catalog__side-title">Price</h2>
+      {keep(['search', 'order', 'attribs']).map((pair) => (
+        <input type="hidden" name={pair.name} value={pair.value} />
+      ))}
+      <div class="catalog__price">
+        <input
+          type="number"
+          name="min_price"
+          min="0"
+          step="any"
+          placeholder="Min"
+          value={params.get('min_price') ?? ''}
+          aria-label="Minimum price"
+        />
+        <span aria-hidden="true">–</span>
+        <input
+          type="number"
+          name="max_price"
+          min="0"
+          step="any"
+          placeholder="Max"
+          value={params.get('max_price') ?? ''}
+          aria-label="Maximum price"
+        />
+      </div>
+      <Button type="submit" variant="secondary" size="sm">Apply</Button>
+    </form>
+  </aside>
+
+  <div class="catalog__main">
+    <form class="catalog__toolbar" method="get" action={action}>
+      {keep(['attribs', 'min_price', 'max_price']).map((pair) => (
+        <input type="hidden" name={pair.name} value={pair.value} />
+      ))}
+      <input
+        class="catalog__search"
+        type="search"
+        name="search"
+        value={params.get('search') ?? ''}
+        placeholder="Search products…"
+        aria-label="Search products"
+      />
+      <Button type="submit" variant="secondary" size="sm">Search</Button>
+      <label class="catalog__sort">
+        <span>Sort</span>
+        <select name="order" data-autosubmit>
+          {SORT_OPTIONS.map((option) => (
+            <option value={option.value} selected={currentOrder === option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
+    </form>
+
+    <p class="catalog__total">
+      {listing.meta.total} {listing.meta.total === 1 ? 'product' : 'products'}
+    </p>
+
+    {listing.data.length === 0 ? (
+      <EmptyState
+        title="No products found"
+        description="Try adjusting the search or removing some filters."
+      >
+        <Button href="/shop" variant="secondary">Reset filters</Button>
+      </EmptyState>
+    ) : (
+      <div class="catalog__grid">
+        {listing.data.map((product) => (
+          <ProductCard product={product} lang={lang} />
+        ))}
+      </div>
+    )}
+
+    <Pagination meta={listing.meta} url={url} />
+  </div>
+</div>
+
+<script>
+  // Auto-submit the toolbar form when the sort select changes.
+  document.querySelectorAll<HTMLSelectElement>('select[data-autosubmit]').forEach((select) => {
+    select.addEventListener('change', () => select.form?.requestSubmit());
+  });
+</script>
+
+<style>
+  .catalog {
+    display: grid;
+    grid-template-columns: 240px minmax(0, 1fr);
+    gap: var(--od-space-6);
+    align-items: start;
+  }
+  @media (max-width: 800px) {
+    .catalog {
+      grid-template-columns: 1fr;
+    }
+  }
+  .catalog__side {
+    display: flex;
+    flex-direction: column;
+    gap: var(--od-space-6);
+  }
+  .catalog__side-title {
+    font-size: var(--od-text-xs);
+    font-weight: 650;
+    letter-spacing: var(--od-tracking-wide);
+    text-transform: uppercase;
+    color: var(--od-fg-subtle);
+    margin: 0 0 var(--od-space-2);
+  }
+  .catalog__all {
+    display: block;
+    padding: var(--od-space-1) var(--od-space-2);
+    border-radius: var(--od-radius-s);
+    color: var(--od-fg-muted);
+    font-size: var(--od-text-sm);
+    margin-bottom: var(--od-space-1);
+  }
+  .catalog__all:hover {
+    background: var(--od-bg-hover);
+    color: var(--od-fg);
+  }
+  .catalog__all.active {
+    color: var(--od-accent);
+    background: var(--od-accent-soft);
+  }
+  .catalog__facet {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .catalog__facet-link {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--od-space-2);
+    padding: var(--od-space-1) var(--od-space-2);
+    border-radius: var(--od-radius-s);
+    color: var(--od-fg-muted);
+    font-size: var(--od-text-sm);
+  }
+  .catalog__facet-link:hover {
+    background: var(--od-bg-hover);
+    color: var(--od-fg);
+  }
+  .catalog__facet-link.active {
+    color: var(--od-accent);
+    background: var(--od-accent-soft);
+  }
+  .catalog__count {
+    font-size: var(--od-text-xs);
+    color: var(--od-fg-subtle);
+  }
+  .catalog__price {
+    display: flex;
+    align-items: center;
+    gap: var(--od-space-2);
+    margin-bottom: var(--od-space-3);
+    color: var(--od-fg-subtle);
+  }
+  .catalog__price input {
+    width: 100%;
+    min-width: 0;
+    font: inherit;
+    font-size: var(--od-text-sm);
+    color: var(--od-fg);
+    background: var(--od-bg-inset);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-m);
+    padding: var(--od-space-1) var(--od-space-2);
+  }
+  .catalog__price input:focus {
+    border-color: var(--od-accent);
+    outline: none;
+  }
+  .catalog__toolbar {
+    display: flex;
+    align-items: center;
+    gap: var(--od-space-3);
+    flex-wrap: wrap;
+    margin-bottom: var(--od-space-4);
+  }
+  .catalog__search {
+    flex: 1;
+    min-width: 180px;
+    font: inherit;
+    font-size: var(--od-text-sm);
+    color: var(--od-fg);
+    background: var(--od-bg-inset);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-m);
+    padding: var(--od-space-2) var(--od-space-3);
+  }
+  .catalog__search::placeholder {
+    color: var(--od-fg-subtle);
+  }
+  .catalog__search:focus {
+    border-color: var(--od-accent);
+    outline: none;
+  }
+  .catalog__sort {
+    display: flex;
+    align-items: center;
+    gap: var(--od-space-2);
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-muted);
+  }
+  .catalog__sort select {
+    font: inherit;
+    font-size: var(--od-text-sm);
+    color: var(--od-fg);
+    background: var(--od-bg-inset);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-m);
+    padding: var(--od-space-1) var(--od-space-2);
+  }
+  .catalog__total {
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-subtle);
+    margin: 0 0 var(--od-space-4);
+  }
+  .catalog__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: var(--od-space-5);
+  }
+</style>

@@ -1,0 +1,108 @@
+---
+// Product gallery: main image + thumbnails; a tiny inline script switches
+// the main image. The variant picker also updates [data-gallery-main] when
+// the selected combination has its own image.
+import { imgUrl } from '@lib/api/client';
+import type { ProductImage } from '../types';
+
+interface Props {
+  images: ProductImage[];
+  alt: string;
+  /** Used when `images` is empty (e.g. default combination image). */
+  fallback?: string | null;
+}
+const { images, alt, fallback = null } = Astro.props;
+const main = imgUrl(images[0]?.image ?? fallback);
+---
+
+<div class="gallery" data-gallery>
+  <div class="gallery__main">
+    {main ? (
+      <img data-gallery-main src={main} alt={alt} width="800" height="800" />
+    ) : (
+      <div class="gallery__placeholder" data-gallery-main-placeholder aria-hidden="true"></div>
+    )}
+  </div>
+  {images.length > 1 && (
+    <div class="gallery__thumbs">
+      {images.map((image, index) => (
+        <button
+          type="button"
+          class="gallery__thumb"
+          data-gallery-thumb
+          data-src={imgUrl(image.image)}
+          aria-pressed={index === 0 ? 'true' : 'false'}
+          aria-label={image.name || `Image ${index + 1}`}
+        >
+          <img src={imgUrl(image.image)} alt="" width="80" height="80" loading="lazy" />
+        </button>
+      ))}
+    </div>
+  )}
+</div>
+
+<script>
+  document.querySelectorAll<HTMLElement>('[data-gallery]').forEach((gallery) => {
+    const main = gallery.querySelector<HTMLImageElement>('[data-gallery-main]');
+    const thumbs = gallery.querySelectorAll<HTMLButtonElement>('[data-gallery-thumb]');
+    thumbs.forEach((thumb) => {
+      thumb.addEventListener('click', () => {
+        if (main && thumb.dataset.src) main.src = thumb.dataset.src;
+        thumbs.forEach((other) =>
+          other.setAttribute('aria-pressed', other === thumb ? 'true' : 'false'),
+        );
+      });
+    });
+  });
+</script>
+
+<style>
+  .gallery {
+    display: flex;
+    flex-direction: column;
+    gap: var(--od-space-3);
+  }
+  .gallery__main {
+    aspect-ratio: 1 / 1;
+    background: var(--od-bg-inset);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-l);
+    overflow: hidden;
+  }
+  .gallery__main img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+  .gallery__placeholder {
+    width: 100%;
+    height: 100%;
+  }
+  .gallery__thumbs {
+    display: flex;
+    gap: var(--od-space-2);
+    flex-wrap: wrap;
+  }
+  .gallery__thumb {
+    padding: 0;
+    background: var(--od-bg-inset);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-m);
+    overflow: hidden;
+    cursor: pointer;
+    width: 64px;
+    height: 64px;
+    transition: border-color var(--od-dur-fast) var(--od-ease);
+  }
+  .gallery__thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .gallery__thumb:hover {
+    border-color: var(--od-border-strong);
+  }
+  .gallery__thumb[aria-pressed='true'] {
+    border-color: var(--od-accent);
+  }
+</style>

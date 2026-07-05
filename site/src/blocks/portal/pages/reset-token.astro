@@ -1,0 +1,48 @@
+---
+// Password reset — step 2: set the new password (link from the email).
+// Served at both /reset/[token] and /portal/reset/[token] (specs/03-auth.md
+// says reset emails point at /portal/reset/<token>).
+import Button from '@theme/Button.astro';
+import Input from '@theme/Input.astro';
+import AuthShell from '../components/AuthShell.astro';
+import Notice from '../components/Notice.astro';
+
+export const prerender = false;
+
+const token = Astro.params.token ?? '';
+if (!token) return Astro.redirect('/reset', 303);
+
+const error = Astro.url.searchParams.get('error');
+const errorMessages: Record<string, string> = {
+  mismatch: 'The passwords do not match.',
+  invalid: 'This reset link is invalid or has expired. Request a new one.',
+  unknown: 'Something went wrong. Please try again.',
+};
+const errorMessage = error ? (errorMessages[error] ?? errorMessages.unknown) : null;
+---
+
+<AuthShell title="Set new password" heading="Set a new password">
+  {errorMessage && <Notice tone="danger">{errorMessage}</Notice>}
+
+  <form method="post" action="/api/auth/reset">
+    <input type="hidden" name="token" value={token} />
+    <Input label="New password" name="password" type="password" required autocomplete="new-password" />
+    <Input label="Confirm password" name="confirm" type="password" required autocomplete="new-password" />
+    <div class="reset__actions">
+      <Button type="submit" size="lg" class="reset__submit">Set password</Button>
+    </div>
+  </form>
+
+  <div class="reset__links">
+    <a href="/reset">Request a new link</a>
+  </div>
+</AuthShell>
+
+<style>
+  .reset__actions { margin-top: var(--od-space-2); }
+  :global(.reset__submit) { width: 100%; }
+  .reset__links {
+    margin-top: var(--od-space-5);
+    font-size: var(--od-text-sm);
+  }
+</style>

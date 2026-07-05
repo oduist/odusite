@@ -1,0 +1,86 @@
+---
+interface Props {
+  label: string;
+  name: string;
+  type?: astroHTML.JSX.HTMLInputTypeAttribute;
+  value?: string;
+  placeholder?: string;
+  required?: boolean;
+  error?: string;
+  autocomplete?: string;
+  textarea?: boolean;
+  rows?: number;
+}
+const {
+  label,
+  name,
+  type = 'text',
+  value = '',
+  placeholder,
+  required = false,
+  error,
+  autocomplete,
+  textarea = false,
+  rows = 5,
+} = Astro.props;
+const id = `field-${name}`;
+---
+
+<div class="od-field">
+  <label class="od-field__label" for={id}>
+    {label}{required && <span class="od-field__req" aria-hidden="true"> *</span>}
+  </label>
+  {textarea ? (
+    <textarea
+      class:list={['od-field__input', { 'od-field__input--error': !!error }]}
+      id={id}
+      name={name}
+      placeholder={placeholder}
+      required={required}
+      rows={rows}>{value}</textarea>
+  ) : (
+    <input
+      class:list={['od-field__input', { 'od-field__input--error': !!error }]}
+      id={id}
+      name={name}
+      type={type}
+      value={value}
+      placeholder={placeholder}
+      required={required}
+      autocomplete={autocomplete}
+    />
+  )}
+  {error && <p class="od-field__error">{error}</p>}
+</div>
+
+<style>
+  .od-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--od-space-1);
+    margin-bottom: var(--od-space-4);
+  }
+  .od-field__label {
+    font-size: var(--od-text-sm);
+    font-weight: 550;
+    color: var(--od-fg);
+  }
+  .od-field__req { color: var(--od-danger); }
+  .od-field__input {
+    font: inherit;
+    color: var(--od-fg);
+    background: var(--od-bg-inset);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-m);
+    padding: var(--od-space-2) var(--od-space-3);
+    transition: border-color var(--od-dur-fast) var(--od-ease);
+  }
+  .od-field__input::placeholder { color: var(--od-fg-subtle); }
+  .od-field__input:focus { border-color: var(--od-accent); outline: none; }
+  .od-field__input--error { border-color: var(--od-danger); }
+  .od-field__error {
+    margin: 0;
+    font-size: var(--od-text-xs);
+    color: var(--od-danger);
+  }
+</style>

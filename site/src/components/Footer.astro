@@ -1,0 +1,98 @@
+---
+import config from 'virtual:odusite/config';
+import { getSiteConfig } from '@lib/api/base';
+
+// Dynamic import keeps the newsletter block's component (and its inline
+// script) out of the bundle when the block is disabled — a static import
+// would be processed by Vite regardless of the condition.
+const { default: NewsletterForm } = config.blocks.newsletter
+  ? await import('../blocks/newsletter/components/NewsletterForm.astro')
+  : { default: null };
+
+const site = await getSiteConfig(Astro).catch(() => null);
+const year = new Date().getFullYear();
+const socials = Object.entries(site?.social ?? {}).filter(([, url]) => !!url) as [string, string][];
+---
+
+<footer class="od-footer">
+  <div class="od-container od-footer__inner">
+    <div>
+      <p class="od-footer__brand">{site?.name ?? 'Odusite'}</p>
+      {site?.company && (
+        <p class="od-footer__meta">
+          {[site.company.street, site.company.city, site.company.country].filter(Boolean).join(', ')}
+          {site.company.email && <><br />{site.company.email}</>}
+          {site.company.phone && <><br />{site.company.phone}</>}
+        </p>
+      )}
+    </div>
+    <nav class="od-footer__nav" aria-label="Footer">
+      {config.nav.map((item) => <a href={item.href}>{item.label}</a>)}
+    </nav>
+    {(NewsletterForm || socials.length > 0) && (
+      <div class="od-footer__aside">
+        {NewsletterForm && <NewsletterForm />}
+        {socials.length > 0 && (
+          <nav class="od-footer__nav" aria-label="Social">
+            {socials.map(([name, url]) => (
+              <a href={url} rel="noopener noreferrer" target="_blank">
+                {name[0].toUpperCase() + name.slice(1)}
+              </a>
+            ))}
+          </nav>
+        )}
+      </div>
+    )}
+  </div>
+  <div class="od-container od-footer__legal">
+    © {year} {site?.company?.name ?? site?.name ?? ''}
+  </div>
+</footer>
+
+<style>
+  .od-footer {
+    margin-top: auto;
+    border-top: 1px solid var(--od-border);
+    background: var(--od-bg-inset);
+    padding-block: var(--od-space-7) var(--od-space-5);
+  }
+  .od-footer__inner {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr;
+    gap: var(--od-space-6);
+  }
+  @media (max-width: 720px) {
+    .od-footer__inner { grid-template-columns: 1fr; }
+  }
+  .od-footer__brand {
+    font-weight: 700;
+    color: var(--od-fg);
+    margin-bottom: var(--od-space-2);
+  }
+  .od-footer__meta {
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-subtle);
+  }
+  .od-footer__aside {
+    display: flex;
+    flex-direction: column;
+    gap: var(--od-space-4);
+  }
+  .od-footer__nav {
+    display: flex;
+    flex-direction: column;
+    gap: var(--od-space-2);
+  }
+  .od-footer__nav a {
+    color: var(--od-fg-muted);
+    font-size: var(--od-text-sm);
+  }
+  .od-footer__nav a:hover { color: var(--od-fg); }
+  .od-footer__legal {
+    margin-top: var(--od-space-6);
+    padding-top: var(--od-space-4);
+    border-top: 1px solid var(--od-border);
+    font-size: var(--od-text-xs);
+    color: var(--od-fg-subtle);
+  }
+</style>

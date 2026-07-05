@@ -1,0 +1,442 @@
+---
+// /checkout — single page, three sections driven by the server-rendered
+// checkout state: (1) address form(s) posting to /api/shop/checkout/address,
+// (2) delivery method radios posting to /api/shop/checkout/delivery,
+// (3) PaymentSheet once the state machine says payment is ready.
+// Never cached (middleware forces private, no-store).
+import Base from '@layouts/Base.astro';
+import Badge from '@theme/Badge.astro';
+import Button from '@theme/Button.astro';
+import Card from '@theme/Card.astro';
+import PaymentSheet from '@components/payment/PaymentSheet.astro';
+import AddressFields from '../components/AddressFields.astro';
+import CartTotals from '../components/CartTotals.astro';
+import { OdusiteApiError } from '@lib/api/client';
+import { clearCartBinding, getCartBinding } from '@lib/auth/session';
+import {
+  fetchCart,
+  fetchCheckout,
+  fetchCountries,
+  formatMoney,
+  jsonScript,
+} from '../lib';
+import type { Cart, CheckoutState, Country } from '../types';
+
+export const prerender = false;
+
+const lang = Astro.locals.lang;
+const binding = getCartBinding(Astro);
+if (!binding) return Astro.redirect('/cart');
+
+let state: CheckoutState;
+let cart: Cart;
+let countries: Country[];
+try {
+  [state, cart, countries] = await Promise.all([
+    fetchCheckout(Astro),
+    fetchCart(Astro),
+    fetchCountries(Astro),
+  ]);
+} catch (error) {
+  if (error instanceof OdusiteApiError && [401, 403, 404, 410].includes(error.status)) {
+    clearCartBinding(Astro);
+    return Astro.redirect('/cart');
+  }
+  throw error;
+}
+
+const productLines = cart.lines.filter((line) => !line.is_delivery && !line.is_reward);
+if (!state.cart_ok || productLines.length === 0) return Astro.redirect('/cart');
+
+const billing = state.addresses.billing;
+const delivery = state.addresses.delivery;
+const billingComplete = !!(billing && billing.street);
+const differentInitial = !!(
+  delivery &&
+  billing &&
+  (delivery.street !== billing.street ||
+    delivery.zip !== billing.zip ||
+    delivery.name !== billing.name)
+);
+const deliveryComplete = !state.needs_delivery || !!state.selected_delivery_id;
+const paymentReady = state.payment_ready;
+const deliveryMethods = state.delivery_methods ?? [];
+const stateErrors = state.errors ?? [];
+
+// Validation errors carried back from /api/shop/checkout/address.
+const params = Astro.url.searchParams;
+const addressError = params.get('address_error');
+const errorFields = (params.get('address_error_fields') ?? '').split(',').filter(Boolean);
+---
+
+<Base title="Checkout" noindex>
+  <div class="od-container od-section">
+    <h1>Checkout</h1>
+
+    <div class="checkout">
+      <div class="checkout__main">
+        <section class="checkout__section" id="address" aria-labelledby="checkout-address-title">
+          <header class="checkout__header">
+            <h2 id="checkout-address-title">1. Address</h2>
+            {billingComplete && <Badge tone="success">Saved</Badge>}
+          </header>
+          {addressError && <p class="checkout__error" role="alert">{addressError}</p>}
+          {stateErrors.length > 0 && (
+            <ul class="checkout__state-errors">
+              {stateErrors.map((message) => (
+                <li>{message}</li>
+              ))}
+            </ul>
+          )}
+          <form method="post" action="/api/shop/checkout/address" class="checkout__form">
+            <AddressFields
+              prefix="billing"
+              values={billing}
+              countries={countries}
+              errorFields={errorFields}
+              withEmail
+            />
+            <label class="checkout__different">
+              <input
+                type="checkbox"
+                name="different_delivery"
+                data-different-toggle
+                checked={differentInitial}
+              />
+              <span>Ship to a different address</span>
+            </label>
+            <fieldset
+              class="checkout__delivery-fields"
+              data-delivery-fields
+              hidden={!differentInitial}
+              disabled={!differentInitial}
+            >
+              <legend>Delivery address</legend>
+              <AddressFields
+                prefix="delivery"
+                values={delivery}
+                countries={countries}
+                errorFields={errorFields}
+              />
+            </fieldset>
+            <Button type="submit">{billingComplete ? 'Update address' : 'Save address'}</Button>
+          </form>
+        </section>
+
+        <section class="checkout__section" aria-labelledby="checkout-delivery-title">
+          <header class="checkout__header">
+            <h2 id="checkout-delivery-title">2. Delivery</h2>
+            {billingComplete && deliveryComplete && <Badge tone="success">Selected</Badge>}
+          </header>
+          {!billingComplete ? (
+            <p class="checkout__muted">Save your address first.</p>
+          ) : !state.needs_delivery ? (
+            <p class="checkout__muted">No delivery is required for this order.</p>
+          ) : deliveryMethods.length === 0 ? (
+            <p class="checkout__error">No delivery method is available for your address.</p>
+          ) : (
+            <div class="checkout__methods">
+              {deliveryMethods.map((method) => (
+                <label class="checkout__method">
+                  <input
+                    type="radio"
+                    name="delivery_method"
+                    value={method.id}
+                    checked={method.id === state.selected_delivery_id}
+                    data-delivery-radio
+                  />
+                  <span class="checkout__method-body">
+                    <span class="checkout__method-name">{method.name}</span>
+                    {method.description && (
+                      <span class="checkout__method-desc">{method.description}</span>
+                    )}
+                    {typeof method.free_over === 'number' && method.free_over > 0 && (
+                      <span class="checkout__method-desc">
+                        Free over {formatMoney(method.free_over, method.currency, lang)}
+                      </span>
+                    )}
+                  </span>
+                  <span class="checkout__method-price od-mono">
+                    {method.price === 0 ? 'Free' : formatMoney(method.price, method.currency, lang)}
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
+          <p class="checkout__error" data-delivery-error hidden></p>
+        </section>
+
+        <section class="checkout__section" aria-labelledby="checkout-payment-title">
+          <header class="checkout__header">
+            <h2 id="checkout-payment-title">3. Payment</h2>
+          </header>
+          {paymentReady ? (
+            <PaymentSheet
+              document={`order:${binding.id}`}
+              accessToken={binding.token}
+              returnUrl={`/checkout/confirmation?order=${binding.id}`}
+              amount={cart.amounts.total}
+              currency={cart.amounts.currency}
+            />
+          ) : (
+            <p class="checkout__muted">
+              Complete the address{state.needs_delivery ? ' and delivery' : ''} steps to pay.
+            </p>
+          )}
+        </section>
+      </div>
+
+      <aside class="checkout__aside">
+        <Card>
+          <h2 class="checkout__summary-title">Your order</h2>
+          <ul class="checkout__items">
+            {productLines.map((line) => (
+              <li class="checkout__item">
+                <span class="checkout__item-name">
+                  {line.product?.name ?? line.description}
+                  <span class="checkout__item-qty od-mono"> × {line.quantity}</span>
+                </span>
+                <span class="od-mono">
+                  {formatMoney(line.price_total, cart.amounts.currency, lang)}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <CartTotals amounts={cart.amounts} taxMode={cart.tax_mode} lang={lang} />
+          <p class="checkout__edit">
+            <a href="/cart">Edit cart</a>
+          </p>
+        </Card>
+      </aside>
+    </div>
+  </div>
+
+  <script type="application/json" id="checkout-countries" is:inline set:html={jsonScript(countries)} />
+</Base>
+
+<script>
+  interface CountryData {
+    id: number;
+    name: string;
+    states: { id: number; name: string }[];
+    state_required?: boolean;
+  }
+
+  // 1. "Ship to a different address" toggles (and enables/disables, so the
+  //    fields are only submitted when visible) the delivery fieldset.
+  const toggle = document.querySelector<HTMLInputElement>('[data-different-toggle]');
+  const deliveryFields = document.querySelector<HTMLFieldSetElement>('[data-delivery-fields]');
+  toggle?.addEventListener('change', () => {
+    if (!deliveryFields) return;
+    deliveryFields.hidden = !toggle.checked;
+    deliveryFields.disabled = !toggle.checked;
+  });
+
+  // 2. Country change repopulates the sibling state select.
+  const countriesEl = document.getElementById('checkout-countries');
+  const countries: CountryData[] = countriesEl
+    ? (JSON.parse(countriesEl.textContent || '[]') as CountryData[])
+    : [];
+  document.querySelectorAll<HTMLSelectElement>('select[data-country-select]').forEach((select) => {
+    const scope = select.closest<HTMLElement>('[data-address-fields]');
+    const stateWrap = scope?.querySelector<HTMLElement>('[data-state-field]');
+    const stateSelect = scope?.querySelector<HTMLSelectElement>('select[data-state-select]');
+    if (!stateWrap || !stateSelect) return;
+    select.addEventListener('change', () => {
+      const country = countries.find((entry) => entry.id === Number(select.value));
+      const states = country?.states ?? [];
+      const selected = Number(stateSelect.dataset.selected ?? '');
+      stateSelect.replaceChildren(
+        new Option('—', ''),
+        ...states.map((state) => new Option(state.name, String(state.id), false, state.id === selected)),
+      );
+      stateWrap.hidden = states.length === 0;
+      stateSelect.required = !!country?.state_required && states.length > 0;
+    });
+  });
+
+  // 3. Delivery method selection: POST then re-render so totals and the
+  //    payment section reflect the server-side checkout state.
+  const deliveryError = document.querySelector<HTMLElement>('[data-delivery-error]');
+  document.querySelectorAll<HTMLInputElement>('input[data-delivery-radio]').forEach((radio) => {
+    radio.addEventListener('change', async () => {
+      if (deliveryError) deliveryError.hidden = true;
+      document
+        .querySelectorAll<HTMLInputElement>('input[data-delivery-radio]')
+        .forEach((other) => (other.disabled = true));
+      try {
+        const response = await fetch('/api/shop/checkout/delivery', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ delivery_method_id: Number(radio.value) }),
+        });
+        if (!response.ok) {
+          const payload = (await response.json().catch(() => null)) as {
+            error?: { message?: string };
+          } | null;
+          throw new Error(payload?.error?.message ?? 'Could not set the delivery method.');
+        }
+        window.location.reload();
+      } catch (error) {
+        if (deliveryError) {
+          deliveryError.textContent =
+            error instanceof Error ? error.message : 'Could not set the delivery method.';
+          deliveryError.hidden = false;
+        }
+        document
+          .querySelectorAll<HTMLInputElement>('input[data-delivery-radio]')
+          .forEach((other) => (other.disabled = false));
+      }
+    });
+  });
+</script>
+
+<style>
+  .checkout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: var(--od-space-6);
+    align-items: start;
+  }
+  @media (max-width: 900px) {
+    .checkout {
+      grid-template-columns: 1fr;
+    }
+    .checkout__aside {
+      order: -1;
+    }
+  }
+  .checkout__main {
+    display: flex;
+    flex-direction: column;
+    gap: var(--od-space-6);
+  }
+  .checkout__section {
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-l);
+    background: var(--od-bg-raised);
+    padding: var(--od-space-5);
+  }
+  .checkout__header {
+    display: flex;
+    align-items: center;
+    gap: var(--od-space-3);
+    margin-bottom: var(--od-space-4);
+  }
+  .checkout__header h2 {
+    font-size: var(--od-text-lg);
+    margin: 0;
+  }
+  .checkout__form {
+    max-width: 560px;
+  }
+  .checkout__error {
+    color: var(--od-danger);
+    font-size: var(--od-text-sm);
+    margin: 0 0 var(--od-space-3);
+  }
+  .checkout__state-errors {
+    color: var(--od-warning);
+    font-size: var(--od-text-sm);
+    margin: 0 0 var(--od-space-3);
+    padding-left: var(--od-space-4);
+  }
+  .checkout__muted {
+    color: var(--od-fg-subtle);
+    font-size: var(--od-text-sm);
+    margin: 0;
+  }
+  .checkout__different {
+    display: flex;
+    align-items: center;
+    gap: var(--od-space-2);
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-muted);
+    margin-bottom: var(--od-space-4);
+    cursor: pointer;
+  }
+  .checkout__delivery-fields {
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-m);
+    padding: var(--od-space-4);
+    margin: 0 0 var(--od-space-4);
+  }
+  .checkout__delivery-fields legend {
+    font-size: var(--od-text-sm);
+    font-weight: 600;
+    color: var(--od-fg);
+    padding: 0 var(--od-space-2);
+  }
+  .checkout__methods {
+    display: flex;
+    flex-direction: column;
+    gap: var(--od-space-2);
+  }
+  .checkout__method {
+    display: flex;
+    align-items: center;
+    gap: var(--od-space-3);
+    padding: var(--od-space-3) var(--od-space-4);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-m);
+    cursor: pointer;
+    transition: border-color var(--od-dur-fast) var(--od-ease);
+  }
+  .checkout__method:hover {
+    border-color: var(--od-border-strong);
+  }
+  .checkout__method:has(input:checked) {
+    border-color: var(--od-accent);
+  }
+  .checkout__method-body {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
+  }
+  .checkout__method-name {
+    font-size: var(--od-text-sm);
+    font-weight: 550;
+    color: var(--od-fg);
+  }
+  .checkout__method-desc {
+    font-size: var(--od-text-xs);
+    color: var(--od-fg-subtle);
+  }
+  .checkout__method-price {
+    font-size: var(--od-text-sm);
+    color: var(--od-fg);
+    white-space: nowrap;
+  }
+  .checkout__summary-title {
+    font-size: var(--od-text-lg);
+    margin-bottom: var(--od-space-4);
+  }
+  .checkout__items {
+    list-style: none;
+    margin: 0 0 var(--od-space-4);
+    padding: 0 0 var(--od-space-4);
+    border-bottom: 1px solid var(--od-border);
+    display: flex;
+    flex-direction: column;
+    gap: var(--od-space-2);
+  }
+  .checkout__item {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--od-space-3);
+    font-size: var(--od-text-sm);
+    color: var(--od-fg);
+  }
+  .checkout__item-name {
+    min-width: 0;
+  }
+  .checkout__item-qty {
+    color: var(--od-fg-subtle);
+  }
+  .checkout__edit {
+    margin: var(--od-space-4) 0 0;
+    font-size: var(--od-text-sm);
+  }
+</style>

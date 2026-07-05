@@ -1,0 +1,179 @@
+---
+// One address fieldset (billing or delivery) for the checkout form.
+// Field names are prefixed (`billing_street`, `delivery_city`, ...) so a
+// single form POST can carry both addresses. The state select is populated
+// server-side for the current country and re-populated client-side from the
+// embedded countries JSON on country change (script lives in checkout.astro).
+import Input from '@theme/Input.astro';
+import type { CheckoutAddress, Country } from '../types';
+
+interface Props {
+  prefix: 'billing' | 'delivery';
+  values: CheckoutAddress | null;
+  countries: Country[];
+  errorFields?: string[];
+  withEmail?: boolean;
+}
+const { prefix, values, countries, errorFields = [], withEmail = false } = Astro.props;
+
+const text = (key: string): string => {
+  const value = values?.[key];
+  return typeof value === 'string' ? value : '';
+};
+const error = (key: string): string | undefined =>
+  errorFields.includes(`${prefix}_${key}`) ? 'Please check this field.' : undefined;
+
+const countryId = typeof values?.country_id === 'number' ? values.country_id : null;
+const stateId = typeof values?.state_id === 'number' ? values.state_id : null;
+const selectedCountry = countries.find((country) => country.id === countryId);
+const states = selectedCountry?.states ?? [];
+---
+
+<div class="addr" data-address-fields>
+  <Input
+    label="Full name"
+    name={`${prefix}_name`}
+    value={text('name')}
+    required
+    autocomplete="name"
+    error={error('name')}
+  />
+  {withEmail && (
+    <Input
+      label="Email"
+      name={`${prefix}_email`}
+      type="email"
+      value={text('email')}
+      required
+      autocomplete="email"
+      error={error('email')}
+    />
+  )}
+  <Input
+    label="Phone"
+    name={`${prefix}_phone`}
+    type="tel"
+    value={text('phone')}
+    required
+    autocomplete="tel"
+    error={error('phone')}
+  />
+  <Input
+    label="Street"
+    name={`${prefix}_street`}
+    value={text('street')}
+    required
+    autocomplete="address-line1"
+    error={error('street')}
+  />
+  <Input
+    label="Street 2"
+    name={`${prefix}_street2`}
+    value={text('street2')}
+    autocomplete="address-line2"
+    error={error('street2')}
+  />
+  <div class="addr__row">
+    <Input
+      label="City"
+      name={`${prefix}_city`}
+      value={text('city')}
+      required
+      autocomplete="address-level2"
+      error={error('city')}
+    />
+    <Input
+      label="ZIP"
+      name={`${prefix}_zip`}
+      value={text('zip')}
+      autocomplete="postal-code"
+      error={error('zip')}
+    />
+  </div>
+  <div class="addr__field">
+    <label class="addr__label" for={`${prefix}-country`}>
+      Country<span class="addr__req" aria-hidden="true"> *</span>
+    </label>
+    <select
+      class:list={['addr__select', { 'addr__select--error': !!error('country_id') }]}
+      id={`${prefix}-country`}
+      name={`${prefix}_country_id`}
+      required
+      autocomplete="country"
+      data-country-select
+    >
+      <option value="">Select a country…</option>
+      {countries.map((country) => (
+        <option value={country.id} selected={country.id === countryId}>
+          {country.name}
+        </option>
+      ))}
+    </select>
+    {error('country_id') && <p class="addr__error">{error('country_id')}</p>}
+  </div>
+  <div class="addr__field" data-state-field hidden={states.length === 0}>
+    <label class="addr__label" for={`${prefix}-state`}>State / Province</label>
+    <select
+      class="addr__select"
+      id={`${prefix}-state`}
+      name={`${prefix}_state_id`}
+      data-state-select
+      data-selected={stateId ?? ''}
+    >
+      <option value="">—</option>
+      {states.map((state) => (
+        <option value={state.id} selected={state.id === stateId}>
+          {state.name}
+        </option>
+      ))}
+    </select>
+  </div>
+</div>
+
+<style>
+  .addr__row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--od-space-3);
+  }
+  @media (max-width: 520px) {
+    .addr__row {
+      grid-template-columns: 1fr;
+    }
+  }
+  .addr__field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--od-space-1);
+    margin-bottom: var(--od-space-4);
+  }
+  .addr__label {
+    font-size: var(--od-text-sm);
+    font-weight: 550;
+    color: var(--od-fg);
+  }
+  .addr__req {
+    color: var(--od-danger);
+  }
+  .addr__select {
+    font: inherit;
+    color: var(--od-fg);
+    background: var(--od-bg-inset);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-m);
+    padding: var(--od-space-2) var(--od-space-3);
+    transition: border-color var(--od-dur-fast) var(--od-ease);
+  }
+  .addr__select:focus {
+    border-color: var(--od-accent);
+    outline: none;
+  }
+  .addr__select--error {
+    border-color: var(--od-danger);
+  }
+  .addr__error {
+    margin: 0;
+    font-size: var(--od-text-xs);
+    color: var(--od-danger);
+  }
+</style>

@@ -1,0 +1,56 @@
+---
+// Sign-up page: plain form POST to /api/auth/signup.
+import Button from '@theme/Button.astro';
+import Input from '@theme/Input.astro';
+import AuthShell from '../components/AuthShell.astro';
+import Notice from '../components/Notice.astro';
+import { safePath } from '../lib';
+
+export const prerender = false;
+
+const next = safePath(Astro.url.searchParams.get('next'), '/portal');
+if (Astro.locals.user) return Astro.redirect(next, 303);
+
+const error = Astro.url.searchParams.get('error');
+const errorMessages: Record<string, string> = {
+  exists: 'An account with this email already exists. Try signing in instead.',
+  disabled: 'Self-registration is disabled on this site. Contact us to get an invitation.',
+  validation: 'Please check the entered values and try again.',
+  unknown: 'Something went wrong. Please try again.',
+};
+const errorMessage = error ? (errorMessages[error] ?? errorMessages.unknown) : null;
+const disabled = error === 'disabled';
+---
+
+<AuthShell title="Create account" heading="Create account" subtitle="Register to track your orders, invoices and projects.">
+  {errorMessage && <Notice tone={disabled ? 'warning' : 'danger'}>{errorMessage}</Notice>}
+
+  {!disabled && (
+    <form method="post" action="/api/auth/signup">
+      <input type="hidden" name="next" value={next} />
+      <Input label="Name" name="name" required autocomplete="name" placeholder="Your full name" />
+      <Input label="Email" name="email" type="email" required autocomplete="email" placeholder="you@example.com" />
+      <Input label="Password" name="password" type="password" required autocomplete="new-password" />
+      <div class="signup__actions">
+        <Button type="submit" size="lg" class="signup__submit">Create account</Button>
+      </div>
+    </form>
+  )}
+
+  <div class="signup__links">
+    <span>Already registered?</span>
+    <a href="/login">Sign in</a>
+  </div>
+</AuthShell>
+
+<style>
+  .signup__actions { margin-top: var(--od-space-2); }
+  :global(.signup__submit) { width: 100%; }
+  .signup__links {
+    display: flex;
+    gap: var(--od-space-2);
+    margin-top: var(--od-space-5);
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-subtle);
+  }
+</style>

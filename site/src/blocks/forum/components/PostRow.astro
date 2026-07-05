@@ -1,0 +1,114 @@
+---
+// One question row in a forum's question list.
+import Badge from '@theme/Badge.astro';
+import AuthorChip from './AuthorChip.astro';
+import { formatDate } from '../lib';
+import type { ForumPostListItem } from '../types';
+
+interface Props {
+  post: ForumPostListItem;
+  forumSlug: string;
+  lang?: string;
+}
+const { post, forumSlug, lang = 'en' } = Astro.props;
+---
+
+<article class="post-row">
+  <div class="post-row__stats">
+    <span class="post-row__stat">
+      <strong class="od-mono">{post.votes}</strong> votes
+    </span>
+    <span
+      class:list={['post-row__stat', 'post-row__answers', { 'post-row__answers--solved': post.has_validated_answer }]}
+      title={post.has_validated_answer ? 'Has an accepted answer' : undefined}
+    >
+      <strong class="od-mono">{post.answer_count}</strong> answers
+    </span>
+  </div>
+  <div class="post-row__main">
+    <h3 class="post-row__title">
+      <a href={`/forum/${forumSlug}/${post.slug}`}>{post.name}</a>
+    </h3>
+    {post.tags.length > 0 && (
+      <div class="post-row__tags">
+        {post.tags.map((tag) => (
+          <a class="post-row__tag" href={`/forum/${forumSlug}?tag=${encodeURIComponent(tag.slug)}`}>
+            <Badge tone="neutral">{tag.name}</Badge>
+          </a>
+        ))}
+      </div>
+    )}
+  </div>
+  <div class="post-row__meta">
+    <AuthorChip author={post.author} />
+    <span class="post-row__activity">active {formatDate(post.last_activity, lang)}</span>
+  </div>
+</article>
+
+<style>
+  .post-row {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: var(--od-space-4);
+    align-items: center;
+    padding: var(--od-space-4);
+    border-bottom: 1px solid var(--od-border);
+  }
+  .post-row:last-child { border-bottom: none; }
+
+  .post-row__stats {
+    display: flex;
+    flex-direction: column;
+    gap: var(--od-space-1);
+    min-width: 88px;
+  }
+  .post-row__stat {
+    font-size: var(--od-text-xs);
+    color: var(--od-fg-muted);
+  }
+  .post-row__answers {
+    padding: 1px var(--od-space-2);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-s);
+    align-self: start;
+  }
+  .post-row__answers--solved {
+    background: var(--od-success-soft);
+    border-color: var(--od-success);
+    color: var(--od-success);
+  }
+
+  .post-row__title {
+    margin: 0 0 var(--od-space-1);
+    font-size: var(--od-text-base);
+    font-weight: 550;
+  }
+  .post-row__title a { color: var(--od-fg); }
+  .post-row__title a:hover { color: var(--od-accent); }
+  .post-row__tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--od-space-1);
+  }
+  .post-row__tag:hover { text-decoration: none; }
+
+  .post-row__meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--od-space-1);
+  }
+  .post-row__activity {
+    font-size: var(--od-text-xs);
+    color: var(--od-fg-subtle);
+  }
+
+  @media (max-width: 720px) {
+    .post-row {
+      grid-template-columns: 1fr;
+      gap: var(--od-space-2);
+    }
+    .post-row__stats { flex-direction: row; gap: var(--od-space-3); }
+    .post-row__meta { align-items: flex-start; }
+  }
+</style>

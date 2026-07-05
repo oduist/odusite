@@ -1,0 +1,225 @@
+---
+import config from 'virtual:odusite/config';
+import Base from '@layouts/Base.astro';
+import Button from '@theme/Button.astro';
+import EmptyState from '@theme/EmptyState.astro';
+import Input from '@theme/Input.astro';
+import { apiFetch, imgUrl } from '@lib/api/client';
+
+export const prerender = false;
+
+interface SearchResult {
+  type: string;
+  id: number;
+  name: string;
+  url: string;
+  description?: string;
+  image?: string;
+}
+
+interface SearchData {
+  results: SearchResult[];
+  fuzzy_term: string | null;
+}
+
+// Result type → owning block: disabled blocks contribute no results (their
+// routes do not exist), so we only ask Odoo for the types we can link to.
+const TYPE_BLOCKS: Record<string, string> = {
+  'product.template': 'shop',
+  'product.public.category': 'shop',
+  'blog.blog': 'blog',
+  'blog.post': 'blog',
+  'event.event': 'events',
+  'hr.job': 'jobs',
+  'forum.forum': 'forum',
+  'forum.post': 'forum',
+  'forum.tag': 'forum',
+  'slide.channel': 'courses',
+  'slide.slide': 'courses',
+};
+
+const TYPE_LABELS: Record<string, string> = {
+  'product.template': 'Products',
+  'product.public.category': 'Product categories',
+  'blog.blog': 'Blogs',
+  'blog.post': 'Blog posts',
+  'event.event': 'Events',
+  'hr.job': 'Jobs',
+  'forum.forum': 'Forums',
+  'forum.post': 'Forum posts',
+  'forum.tag': 'Forum tags',
+  'slide.channel': 'Courses',
+  'slide.slide': 'Course content',
+};
+
+/** Rewrite Odoo-style result URLs to the matching site routes. */
+function siteUrl(item: SearchResult): string {
+  const url = item.url || '';
+  switch (item.type) {
+    case 'event.event':
+      return url.replace(/^\/event\//, '/events/');
+    case 'slide.channel':
+    case 'slide.slide':
+      return url.replace(/^\/slides\//, '/courses/');
+    case 'blog.post': {
+      // Odoo: /blog/<blog-slug>/<post-slug>; the site route is /blog/<post-slug>.
+      const segments = url.split('/').filter(Boolean);
+      return segments.length > 2 ? `/blog/${segments[segments.length - 1]}` : url;
+    }
+    case 'blog.blog':
+      // Blogs have no dedicated site page — link to the blog index.
+      return '/blog';
+    default:
+      return url;
+  }
+}
+
+const blocks = config.blocks as Record<string, boolean>;
+const enabledTypes = Object.entries(TYPE_BLOCKS)
+  .filter(([, block]) => blocks[block])
+  .map(([type]) => type);
+
+const q = (Astro.url.searchParams.get('q') ?? '').trim();
+
+let results: SearchResult[] = [];
+let fuzzyTerm: string | null = null;
+let count = 0;
+if (q && enabledTypes.length) {
+  const response = await apiFetch<{ data: SearchData; meta: { count: number } }>(
+    Astro,
+    '/search',
+    {
+      query: { q, types: enabledTypes.join(','), limit: 20 },
+      auth: false,
+      cart: false,
+    },
+  );
+  results = response.data.results;
+  fuzzyTerm = response.data.fuzzy_term;
+  count = response.meta.count;
+}
+
+// Search results are user-specific queries — never edge cached (default
+// no-store from the SSR adapter; deliberately no Cache-Control override).
+
+const groups = new Map<string, SearchResult[]>();
+for (const item of results) {
+  const list = groups.get(item.type) ?? [];
+  list.push(item);
+  groups.set(item.type, list);
+}
+---
+
+<Base title={q ? `Search: ${q}` : 'Search'} description="Search the site." noindex>
+  <section class="od-section od-container search-page">
+    <h1>Search</h1>
+    <form class="search-form" method="get" action="/search" role="search">
+      <Input label="Search the site" name="q" type="search" value={q} placeholder="Search products, articles, events…" />
+      <Button type="submit">Search</Button>
+    </form>
+
+    {q && fuzzyTerm && (
+      <p class="search-fuzzy">
+        No exact matches for “{q}” — showing results for <strong>{fuzzyTerm}</strong> instead.
+      </p>
+    )}
+
+    {q && results.length === 0 && (
+      <EmptyState
+        title={`No results for “${q}”`}
+        description="Try a different or more general search term."
+      />
+    )}
+
+    {results.length > 0 && (
+      <p class="search-count">{count} result{count === 1 ? '' : 's'}</p>
+    )}
+
+    {[...groups.entries()].map(([type, items]) => (
+      <section class="search-group">
+        <h2>{TYPE_LABELS[type] ?? type}</h2>
+        <ul class="search-results">
+          {items.map((item) => (
+            <li class="search-result">
+              {item.image && (
+                <img class="search-result__img" src={imgUrl(item.image)} alt="" loading="lazy" width="48" height="48" />
+              )}
+              <div>
+                <a class="search-result__link" href={siteUrl(item)}>{item.name}</a>
+                {item.description && <p class="search-result__desc">{item.description}</p>}
+              </div>
+            </li>
+          ))}
+        </ul>
+      </section>
+    ))}
+  </section>
+</Base>
+
+<style>
+  .search-page h1 {
+    margin-bottom: var(--od-space-5);
+  }
+  .search-form {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--od-space-3);
+    max-width: 560px;
+    margin-bottom: var(--od-space-7);
+  }
+  .search-form :global(.od-field) {
+    flex: 1;
+    margin-bottom: 0;
+  }
+  .search-fuzzy {
+    color: var(--od-fg-muted);
+    margin-bottom: var(--od-space-5);
+  }
+  .search-count {
+    color: var(--od-fg-subtle);
+    font-size: var(--od-text-sm);
+    margin-bottom: var(--od-space-4);
+  }
+  .search-group {
+    margin-bottom: var(--od-space-7);
+  }
+  .search-group h2 {
+    font-size: var(--od-text-lg);
+    color: var(--od-fg);
+    border-bottom: 1px solid var(--od-border);
+    padding-bottom: var(--od-space-2);
+    margin-bottom: var(--od-space-4);
+  }
+  .search-results {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--od-space-4);
+  }
+  .search-result {
+    display: flex;
+    gap: var(--od-space-3);
+    align-items: flex-start;
+  }
+  .search-result__img {
+    border-radius: var(--od-radius-m);
+    border: 1px solid var(--od-border);
+    object-fit: cover;
+    background: var(--od-bg-inset);
+    flex-shrink: 0;
+  }
+  .search-result__link {
+    color: var(--od-fg);
+    font-weight: 600;
+  }
+  .search-result__link:hover {
+    color: var(--od-accent);
+  }
+  .search-result__desc {
+    margin: var(--od-space-1) 0 0;
+    color: var(--od-fg-muted);
+    font-size: var(--od-text-sm);
+  }
+</style>

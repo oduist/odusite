@@ -1,0 +1,28 @@
+---
+// Portal quotations list: GET /my/orders?state=quotes (state=sent).
+import Pagination from '@components/Pagination.astro';
+import PortalLayout from '../../components/PortalLayout.astro';
+import OrdersTable from '../../components/OrdersTable.astro';
+import { loginRedirect, portalApi } from '../../lib';
+import type { ApiListResult } from '@lib/api/client';
+import type { OrderListItem } from '../../types';
+
+export const prerender = false;
+if (!Astro.locals.user) return loginRedirect(Astro);
+
+const page = Number(Astro.url.searchParams.get('page') ?? '1') || 1;
+const result = await portalApi<ApiListResult<OrderListItem>>(Astro, '/my/orders', {
+  query: { state: 'quotes', page },
+});
+if (result instanceof Response) return result;
+---
+
+<PortalLayout title="Quotations" active="quotes">
+  <h1>Quotations</h1>
+  <OrdersTable
+    orders={result.data}
+    emptyTitle="No quotations"
+    emptyDescription="Quotations sent to you for review will appear here."
+  />
+  <Pagination meta={result.meta} url={Astro.url} />
+</PortalLayout>

@@ -1,0 +1,67 @@
+---
+// Shared orders/quotations table (specs/modules/odusite_sale.md — portal orders).
+import Badge from '@theme/Badge.astro';
+import EmptyState from '@theme/EmptyState.astro';
+import { formatDate, formatMoney, orderStateLabel, orderStateTone } from '../lib';
+import type { OrderListItem } from '../types';
+
+interface Props {
+  orders: OrderListItem[];
+  emptyTitle: string;
+  emptyDescription?: string;
+}
+const { orders, emptyTitle, emptyDescription } = Astro.props;
+---
+
+{orders.length === 0 ? (
+  <EmptyState title={emptyTitle} description={emptyDescription} />
+) : (
+  <div class="orders__scroll">
+    <table class="orders">
+      <thead>
+        <tr>
+          <th>Reference</th>
+          <th>Date</th>
+          <th>Status</th>
+          <th class="orders__num">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {orders.map((order) => (
+          <tr>
+            <td><a class="orders__ref od-mono" href={`/portal/orders/${order.id}`}>{order.name}</a></td>
+            <td>{formatDate(order.date_order)}</td>
+            <td><Badge tone={orderStateTone(order.state)}>{orderStateLabel(order.state)}</Badge></td>
+            <td class="orders__num od-mono">{formatMoney(order.amount_total, order.currency)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+)}
+
+<style>
+  .orders__scroll { overflow-x: auto; }
+  .orders {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--od-text-sm);
+  }
+  .orders th {
+    text-align: left;
+    font-size: var(--od-text-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: var(--od-tracking-wide);
+    color: var(--od-fg-subtle);
+    padding: var(--od-space-2) var(--od-space-3);
+    border-bottom: 1px solid var(--od-border-strong);
+  }
+  .orders td {
+    padding: var(--od-space-3);
+    border-bottom: 1px solid var(--od-border);
+    color: var(--od-fg-muted);
+  }
+  .orders__ref { font-weight: 600; }
+  .orders__num { text-align: right; }
+</style>

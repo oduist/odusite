@@ -1,0 +1,43 @@
+---
+// Password reset — step 1: request the reset email.
+import Button from '@theme/Button.astro';
+import Input from '@theme/Input.astro';
+import AuthShell from '../components/AuthShell.astro';
+import Notice from '../components/Notice.astro';
+
+export const prerender = false;
+
+const sent = Astro.url.searchParams.get('sent') === '1';
+---
+
+<AuthShell
+  title="Reset password"
+  heading="Reset password"
+  subtitle="Enter your login email and we will send you a reset link."
+>
+  {sent && (
+    <Notice tone="success">
+      If an account exists for that email, a password reset link is on its way.
+    </Notice>
+  )}
+
+  <form method="post" action="/api/auth/forgot">
+    <Input label="Email" name="login" type="email" required autocomplete="email" placeholder="you@example.com" />
+    <div class="reset__actions">
+      <Button type="submit" size="lg" class="reset__submit">Send reset link</Button>
+    </div>
+  </form>
+
+  <div class="reset__links">
+    <a href="/login">Back to sign in</a>
+  </div>
+</AuthShell>
+
+<style>
+  .reset__actions { margin-top: var(--od-space-2); }
+  :global(.reset__submit) { width: 100%; }
+  .reset__links {
+    margin-top: var(--od-space-5);
+    font-size: var(--od-text-sm);
+  }
+</style>

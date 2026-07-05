@@ -1,0 +1,29 @@
+---
+interface Props {
+  tone?: 'neutral' | 'accent' | 'success' | 'warning' | 'danger' | 'info';
+  class?: string;
+}
+const { tone = 'neutral', class: className = '' } = Astro.props;
+---
+
+<span class:list={['od-badge', `od-badge--${tone}`, className]}><slot /></span>
+
+<style>
+  .od-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--od-space-1);
+    padding: 2px var(--od-space-2);
+    border-radius: var(--od-radius-full);
+    font-size: var(--od-text-xs);
+    font-weight: 550;
+    letter-spacing: var(--od-tracking-wide);
+    text-transform: uppercase;
+  }
+  .od-badge--neutral { background: var(--od-bg-hover); color: var(--od-fg-muted); }
+  .od-badge--accent { background: var(--od-accent-soft); color: var(--od-accent); }
+  .od-badge--success { background: var(--od-success-soft); color: var(--od-success); }
+  .od-badge--warning { background: var(--od-warning-soft); color: var(--od-warning); }
+  .od-badge--danger { background: var(--od-danger-soft); color: var(--od-danger); }
+  .od-badge--info { background: var(--od-info-soft); color: var(--od-info); }
+</style>

@@ -1,0 +1,48 @@
+---
+interface Props {
+  title: string;
+  subtitle?: string;
+  image?: string | null;
+  align?: 'left' | 'center';
+}
+const { title, subtitle, image, align = 'left' } = Astro.props;
+---
+
+<header class:list={['od-hero', `od-hero--${align}`]}>
+  {image && <img class="od-hero__bg" src={image} alt="" loading="eager" />}
+  <div class="od-hero__inner od-container">
+    <h1 class="od-hero__title">{title}</h1>
+    {subtitle && <p class="od-hero__subtitle">{subtitle}</p>}
+    <slot />
+  </div>
+</header>
+
+<style>
+  .od-hero {
+    position: relative;
+    padding-block: var(--od-space-9);
+    border-bottom: 1px solid var(--od-border);
+    background:
+      radial-gradient(60% 120% at 20% 0%, var(--od-accent-soft), transparent 60%),
+      var(--od-bg-inset);
+    overflow: hidden;
+  }
+  .od-hero--center { text-align: center; }
+  .od-hero__bg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: 0.18;
+  }
+  .od-hero__inner { position: relative; }
+  .od-hero__title { margin-bottom: var(--od-space-3); }
+  .od-hero__subtitle {
+    font-size: var(--od-text-lg);
+    color: var(--od-fg-muted);
+    max-width: 60ch;
+    margin-bottom: var(--od-space-5);
+  }
+  .od-hero--center .od-hero__subtitle { margin-inline: auto; }
+</style>

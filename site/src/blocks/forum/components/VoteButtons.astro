@@ -1,0 +1,78 @@
+---
+// Vertical vote widget for a question or an answer. Interactivity is wired
+// by the thread page script via [data-vote-box] / [data-vote] hooks.
+interface Props {
+  postId: number;
+  votes: number;
+  userVote?: -1 | 0 | 1;
+  /** False for anonymous visitors: buttons disabled with a sign-in tooltip. */
+  canVote: boolean;
+}
+const { postId, votes, userVote = 0, canVote } = Astro.props;
+const tooltip = canVote ? undefined : 'Sign in to vote';
+---
+
+<div class="votebox" data-vote-box data-post-id={postId}>
+  <button
+    type="button"
+    class:list={['votebox__btn', { 'votebox__btn--active': userVote === 1 }]}
+    data-vote="1"
+    disabled={!canVote}
+    title={tooltip ?? 'This is helpful'}
+    aria-label="Upvote"
+    aria-pressed={userVote === 1 ? 'true' : 'false'}
+  >▲</button>
+  <span class="votebox__count od-mono" data-vote-count>{votes}</span>
+  <button
+    type="button"
+    class:list={['votebox__btn', { 'votebox__btn--active': userVote === -1 }]}
+    data-vote="-1"
+    disabled={!canVote}
+    title={tooltip ?? 'This is not helpful'}
+    aria-label="Downvote"
+    aria-pressed={userVote === -1 ? 'true' : 'false'}
+  >▼</button>
+</div>
+
+<style>
+  .votebox {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--od-space-1);
+  }
+  .votebox__btn {
+    width: 34px;
+    height: 30px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--od-bg-raised);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-s);
+    color: var(--od-fg-muted);
+    font-size: var(--od-text-xs);
+    cursor: pointer;
+    transition:
+      color var(--od-dur-fast) var(--od-ease),
+      border-color var(--od-dur-fast) var(--od-ease);
+  }
+  .votebox__btn:hover:not(:disabled) {
+    color: var(--od-accent);
+    border-color: var(--od-accent);
+  }
+  .votebox__btn--active {
+    color: var(--od-accent);
+    border-color: var(--od-accent);
+    background: var(--od-accent-soft);
+  }
+  .votebox__btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .votebox__count {
+    font-size: var(--od-text-base);
+    font-weight: 600;
+    color: var(--od-fg);
+  }
+</style>

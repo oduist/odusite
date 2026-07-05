@@ -1,0 +1,27 @@
+---
+interface Props {
+  href?: string;
+  padded?: boolean;
+  class?: string;
+}
+const { href, padded = true, class: className = '' } = Astro.props;
+const Tag = href ? 'a' : 'div';
+---
+
+<Tag class:list={['od-card', { 'od-card--padded': padded, 'od-card--link': !!href }, className]} href={href}>
+  <slot />
+</Tag>
+
+<style>
+  .od-card {
+    display: block;
+    background: var(--od-bg-raised);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-l);
+    color: inherit;
+    overflow: hidden;
+    transition: border-color var(--od-dur-base) var(--od-ease);
+  }
+  .od-card--padded { padding: var(--od-space-5); }
+  .od-card--link:hover { border-color: var(--od-border-strong); color: inherit; }
+</style>

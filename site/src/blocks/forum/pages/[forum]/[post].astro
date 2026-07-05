@@ -1,0 +1,471 @@
+---
+// /forum/[forum]/[post] — Q&A thread: question, answers, votes, comments,
+// accept toggle and the answer editor.
+import Base from '@layouts/Base.astro';
+import Badge from '@theme/Badge.astro';
+import Button from '@theme/Button.astro';
+import Card from '@theme/Card.astro';
+import Input from '@theme/Input.astro';
+import { apiFetch, OdusiteApiError } from '@lib/api/client';
+import AuthorChip from '../../components/AuthorChip.astro';
+import VoteButtons from '../../components/VoteButtons.astro';
+import { formatDate, rewriteHtml } from '../../lib';
+import type { ForumComment, ForumPostDetail } from '../../types';
+
+export const prerender = false;
+
+const forumSlug = Astro.params.forum ?? '';
+const postSlug = Astro.params.post ?? '';
+const lang = Astro.locals.lang?.split('_')[0] ?? 'en';
+const user = Astro.locals.user;
+
+let post: ForumPostDetail;
+try {
+  post = await apiFetch<ForumPostDetail>(Astro, `/forum/posts/${postSlug}`, { cart: false });
+} catch (error) {
+  if (error instanceof OdusiteApiError && error.status === 404) return Astro.rewrite('/404');
+  throw error;
+}
+// Canonical URL: the thread always lives under its own forum slug.
+if (post.forum.slug !== forumSlug) {
+  return Astro.redirect(`/forum/${post.forum.slug}/${post.slug}`, 301);
+}
+
+const ctx = post.user_context ?? null;
+const answers = [...post.answers].sort(
+  (a, b) => Number(b.is_correct) - Number(a.is_correct) || b.votes - a.votes,
+);
+const nextParam = encodeURIComponent(Astro.url.pathname);
+
+Astro.response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=300');
+Astro.response.headers.set('X-Odusite-Tags', `forum,forum:${post.forum.id}`);
+---
+
+<Base
+  title={post.seo?.title ?? `${post.name} — ${post.forum.name}`}
+  description={post.seo?.description ?? undefined}
+  ogImage={post.seo?.og_image ?? undefined}
+  ogType="article"
+>
+  <article class="od-section od-container thread" data-thread>
+    <nav class="thread__crumbs" aria-label="Breadcrumb">
+      <a href="/forum">Forum</a> <span aria-hidden="true">/</span>
+      <a href={`/forum/${post.forum.slug}`}>{post.forum.name}</a>
+    </nav>
+
+    <header class="thread__head">
+      <h1 class="thread__title">
+        {post.has_validated_answer && <span class="thread__solved" title="Solved">✓</span>}
+        {post.name}
+        {user && (
+          <button
+            type="button"
+            class:list={['thread__fav', { 'thread__fav--active': ctx?.is_favourite }]}
+            data-favourite={post.id}
+            title={ctx?.is_favourite ? 'Remove from favourites' : 'Add to favourites'}
+            aria-pressed={ctx?.is_favourite ? 'true' : 'false'}
+          >
+            {ctx?.is_favourite ? '★' : '☆'}
+          </button>
+        )}
+      </h1>
+      <p class="thread__meta">
+        <span>{post.views} views</span>
+        <span>·</span>
+        <span>active {formatDate(post.last_activity, lang)}</span>
+      </p>
+    </header>
+
+    <div class="thread__post">
+      <VoteButtons postId={post.id} votes={post.votes} userVote={ctx?.vote ?? 0} canVote={!!user} />
+      <div class="thread__body">
+        <div class="thread__content" set:html={rewriteHtml(post.content_html)} />
+        {post.tags.length > 0 && (
+          <div class="thread__tags">
+            {post.tags.map((tag) => (
+              <a href={`/forum/${post.forum.slug}?tag=${encodeURIComponent(tag.slug)}`}>
+                <Badge tone="neutral">{tag.name}</Badge>
+              </a>
+            ))}
+          </div>
+        )}
+        <div class="thread__byline">
+          <AuthorChip author={post.author} label="asked" />
+        </div>
+
+        <details class="comments">
+          <summary class="comments__summary">
+            {post.comments.length === 0
+              ? 'Add a comment'
+              : `${post.comments.length} comment${post.comments.length === 1 ? '' : 's'}`}
+          </summary>
+          <ul class="comments__list">
+            {post.comments.map((comment: ForumComment) => (
+              <li class="comments__item">
+                <span class="comments__content" set:html={rewriteHtml(comment.content_html)} />
+                <span class="comments__meta">
+                  — <a href={`/forum/users/${comment.author.id}`}>{comment.author.name}</a>
+                  {' '}{formatDate(comment.create_date, lang)}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {user ? (
+            <form class="comments__form" data-comment-form data-post-id={post.id}>
+              <Input label="Your comment" name="content" textarea rows={2} required />
+              <Button type="submit" variant="secondary" size="sm">Comment</Button>
+            </form>
+          ) : (
+            <p class="comments__signin">
+              <a href={`/login?next=${nextParam}`}>Sign in</a> to comment.
+            </p>
+          )}
+        </details>
+      </div>
+    </div>
+
+    <section class="answers" aria-label="Answers">
+      <h2 class="answers__title">
+        {answers.length} {answers.length === 1 ? 'Answer' : 'Answers'}
+      </h2>
+
+      {answers.map((answer) => (
+        <div class:list={['answer', { 'answer--accepted': answer.is_correct }]} id={`answer-${answer.id}`}>
+          <div class="answer__votes">
+            <VoteButtons postId={answer.id} votes={answer.votes} canVote={!!user} />
+            {ctx?.can_accept ? (
+              <button
+                type="button"
+                class:list={['answer__accept', { 'answer__accept--active': answer.is_correct }]}
+                data-accept={answer.id}
+                title={answer.is_correct ? 'Unaccept this answer' : 'Accept this answer'}
+                aria-pressed={answer.is_correct ? 'true' : 'false'}
+              >✓</button>
+            ) : (
+              answer.is_correct && <span class="answer__accepted-mark" title="Accepted answer">✓</span>
+            )}
+          </div>
+          <div class="answer__body">
+            {answer.is_correct && <Badge tone="success" class="answer__badge">Accepted answer</Badge>}
+            <div class="thread__content" set:html={rewriteHtml(answer.content_html)} />
+            <div class="thread__byline">
+              <AuthorChip author={answer.author} label="answered" date={formatDate(answer.create_date, lang)} />
+            </div>
+
+            <details class="comments">
+              <summary class="comments__summary">
+                {answer.comments.length === 0
+                  ? 'Add a comment'
+                  : `${answer.comments.length} comment${answer.comments.length === 1 ? '' : 's'}`}
+              </summary>
+              <ul class="comments__list">
+                {answer.comments.map((comment) => (
+                  <li class="comments__item">
+                    <span class="comments__content" set:html={rewriteHtml(comment.content_html)} />
+                    <span class="comments__meta">
+                      — <a href={`/forum/users/${comment.author.id}`}>{comment.author.name}</a>
+                      {' '}{formatDate(comment.create_date, lang)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {user ? (
+                <form class="comments__form" data-comment-form data-post-id={answer.id}>
+                  <Input label="Your comment" name="content" textarea rows={2} required />
+                  <Button type="submit" variant="secondary" size="sm">Comment</Button>
+                </form>
+              ) : (
+                <p class="comments__signin">
+                  <a href={`/login?next=${nextParam}`}>Sign in</a> to comment.
+                </p>
+              )}
+            </details>
+          </div>
+        </div>
+      ))}
+    </section>
+
+    <section class="editor" aria-label="Your answer">
+      <h2>Your answer</h2>
+      {user ? (
+        <form data-answer-form data-post-id={post.id}>
+          <Input
+            label="Answer"
+            name="content"
+            textarea
+            rows={8}
+            required
+            placeholder="Share your knowledge. Markdown-lite is supported."
+          />
+          <Button type="submit">Post your answer</Button>
+        </form>
+      ) : (
+        <Card class="editor__signin">
+          <p>You need an account to answer questions and earn karma.</p>
+          <Button href={`/login?next=${nextParam}`}>Sign in to answer</Button>
+        </Card>
+      )}
+    </section>
+  </article>
+</Base>
+
+<script>
+  type ApiError = { code?: string; message?: string; details?: Record<string, unknown> };
+
+  async function postAction(
+    path: string,
+    body: Record<string, unknown>,
+  ): Promise<{ ok: boolean; error?: ApiError }> {
+    const response = await fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (response.ok) return { ok: true };
+    let error: ApiError = {};
+    try {
+      error = ((await response.json()) as { error?: ApiError }).error ?? {};
+    } catch {
+      /* non-JSON error body */
+    }
+    return { ok: false, error };
+  }
+
+  function handleError(error: ApiError | undefined): void {
+    if (error?.code === 'login_required') {
+      window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
+      return;
+    }
+    if (error?.code === 'karma_required') {
+      const needed = error.details?.karma_required;
+      window.alert(
+        error.message ??
+          (typeof needed === 'number'
+            ? `You need ${needed} karma for this action.`
+            : 'More karma is required for this action.'),
+      );
+      return;
+    }
+    window.alert(error?.message ?? 'Something went wrong. Please try again.');
+  }
+
+  // Votes (question + answers). Clicking the active direction retracts (vote 0).
+  document.querySelectorAll<HTMLElement>('[data-vote-box]').forEach((box) => {
+    const postId = Number(box.dataset.postId);
+    if (!postId) return;
+    box.querySelectorAll<HTMLButtonElement>('button[data-vote]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const active = button.classList.contains('votebox__btn--active');
+        const vote = active ? 0 : Number(button.dataset.vote);
+        if (Number.isNaN(vote)) return;
+        const result = await postAction('/api/forum/vote', { post_id: postId, vote });
+        if (result.ok) window.location.reload();
+        else handleError(result.error);
+      });
+    });
+  });
+
+  // Accept toggle (question author only).
+  document.querySelectorAll<HTMLButtonElement>('button[data-accept]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const answerId = Number(button.dataset.accept);
+      if (!answerId) return;
+      const result = await postAction('/api/forum/accept', { post_id: answerId });
+      if (result.ok) window.location.reload();
+      else handleError(result.error);
+    });
+  });
+
+  // Favourite toggle.
+  const favourite = document.querySelector<HTMLButtonElement>('button[data-favourite]');
+  favourite?.addEventListener('click', async () => {
+    const postId = Number(favourite.dataset.favourite);
+    if (!postId) return;
+    const result = await postAction('/api/forum/favourite', { post_id: postId });
+    if (result.ok) window.location.reload();
+    else handleError(result.error);
+  });
+
+  // Answer editor.
+  const answerForm = document.querySelector<HTMLFormElement>('form[data-answer-form]');
+  answerForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const content = String(new FormData(answerForm).get('content') ?? '').trim();
+    if (!content) return;
+    const submit = answerForm.querySelector<HTMLButtonElement>('button[type="submit"]');
+    if (submit) submit.disabled = true;
+    const result = await postAction('/api/forum/answer', {
+      post_id: Number(answerForm.dataset.postId),
+      content,
+    });
+    if (result.ok) window.location.reload();
+    else {
+      if (submit) submit.disabled = false;
+      handleError(result.error);
+    }
+  });
+
+  // Comment forms (question + each answer).
+  document.querySelectorAll<HTMLFormElement>('form[data-comment-form]').forEach((form) => {
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const content = String(new FormData(form).get('content') ?? '').trim();
+      if (!content) return;
+      const result = await postAction('/api/forum/comment', {
+        post_id: Number(form.dataset.postId),
+        content,
+      });
+      if (result.ok) window.location.reload();
+      else handleError(result.error);
+    });
+  });
+</script>
+
+<style>
+  .thread__crumbs {
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-subtle);
+    margin-bottom: var(--od-space-3);
+  }
+  .thread__head { margin-bottom: var(--od-space-5); }
+  .thread__title {
+    display: flex;
+    align-items: baseline;
+    gap: var(--od-space-2);
+    flex-wrap: wrap;
+    margin-bottom: var(--od-space-2);
+  }
+  .thread__solved { color: var(--od-success); }
+  .thread__fav {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: var(--od-text-xl);
+    color: var(--od-fg-subtle);
+    line-height: 1;
+    padding: var(--od-space-1);
+  }
+  .thread__fav:hover,
+  .thread__fav--active { color: var(--od-warning); }
+  .thread__meta {
+    display: flex;
+    gap: var(--od-space-2);
+    margin: 0;
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-subtle);
+  }
+
+  .thread__post,
+  .answer {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: var(--od-space-5);
+    padding-block: var(--od-space-5);
+    border-bottom: 1px solid var(--od-border);
+  }
+  .answer--accepted { background: linear-gradient(to right, var(--od-success-soft), transparent 30%); }
+
+  .thread__body,
+  .answer__body { min-width: 0; }
+  .thread__content { color: var(--od-fg); overflow-wrap: anywhere; }
+  .thread__content :global(img) { border-radius: var(--od-radius-m); }
+  .thread__content :global(pre) {
+    background: var(--od-bg-inset);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-m);
+    padding: var(--od-space-3);
+    overflow-x: auto;
+  }
+  .thread__content :global(blockquote) {
+    margin: 0 0 var(--od-space-4);
+    padding-left: var(--od-space-4);
+    border-left: 2px solid var(--od-border-strong);
+    color: var(--od-fg-muted);
+  }
+  .thread__tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--od-space-1);
+    margin-top: var(--od-space-3);
+  }
+  .thread__byline {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: var(--od-space-4);
+  }
+
+  .answer__votes {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--od-space-3);
+  }
+  .answer__accept {
+    width: 34px;
+    height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--od-bg-raised);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-full);
+    color: var(--od-fg-subtle);
+    font-size: var(--od-text-base);
+    cursor: pointer;
+    transition:
+      color var(--od-dur-fast) var(--od-ease),
+      border-color var(--od-dur-fast) var(--od-ease);
+  }
+  .answer__accept:hover { color: var(--od-success); border-color: var(--od-success); }
+  .answer__accept--active {
+    background: var(--od-success-soft);
+    border-color: var(--od-success);
+    color: var(--od-success);
+  }
+  .answer__accepted-mark {
+    color: var(--od-success);
+    font-size: var(--od-text-xl);
+  }
+  .answers__title { margin-top: var(--od-space-6); }
+
+  .comments { margin-top: var(--od-space-4); }
+  .comments__summary {
+    cursor: pointer;
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-subtle);
+  }
+  .comments__summary:hover { color: var(--od-fg); }
+  .comments__list {
+    list-style: none;
+    margin: var(--od-space-2) 0 0;
+    padding: 0;
+  }
+  .comments__item {
+    padding: var(--od-space-2) 0 var(--od-space-2) var(--od-space-4);
+    border-left: 2px solid var(--od-border);
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-muted);
+  }
+  .comments__content :global(p) { display: inline; margin: 0; }
+  .comments__meta { color: var(--od-fg-subtle); }
+  .comments__form { margin-top: var(--od-space-3); max-width: 60ch; }
+  .comments__signin {
+    margin: var(--od-space-2) 0 0;
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-subtle);
+  }
+
+  .editor { margin-top: var(--od-space-7); }
+  .editor form { max-width: 80ch; }
+  .editor :global(.editor__signin) { max-width: 60ch; }
+  .editor :global(.editor__signin p) { margin-bottom: var(--od-space-4); }
+
+  @media (max-width: 720px) {
+    .thread__post,
+    .answer {
+      grid-template-columns: 1fr;
+      gap: var(--od-space-3);
+    }
+    .answer__votes { flex-direction: row; }
+  }
+</style>

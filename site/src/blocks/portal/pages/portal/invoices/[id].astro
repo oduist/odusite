@@ -1,0 +1,200 @@
+---
+// Invoice detail: GET /my/invoices/<id> — lines, totals, Pay (PaymentSheet),
+// PDF download + chatter (account.move is chatter-whitelisted).
+import Badge from '@theme/Badge.astro';
+import Button from '@theme/Button.astro';
+import Card from '@theme/Card.astro';
+import PaymentSheet from '@components/payment/PaymentSheet.astro';
+import PortalLayout from '../../../components/PortalLayout.astro';
+import Chatter from '../../../components/Chatter.astro';
+import Notice from '../../../components/Notice.astro';
+import {
+  formatDate,
+  formatMoney,
+  invoiceStateLabel,
+  invoiceTone,
+  loginRedirect,
+  portalApi,
+} from '../../../lib';
+import type { ApiListResult } from '@lib/api/client';
+import type { ChatterMessage, InvoiceDetail } from '../../../types';
+
+export const prerender = false;
+if (!Astro.locals.user) return loginRedirect(Astro);
+
+const id = Number(Astro.params.id);
+if (!Number.isInteger(id) || id <= 0) return await Astro.rewrite('/404');
+
+const invoice = await portalApi<InvoiceDetail>(Astro, `/my/invoices/${id}`);
+if (invoice instanceof Response) return invoice;
+
+let messages: ChatterMessage[] = [];
+try {
+  const chatter = await portalApi<ApiListResult<ChatterMessage>>(
+    Astro,
+    `/chatter/account.move/${id}/messages`,
+    { query: { limit: 30 } },
+  );
+  if (chatter instanceof Response) return chatter;
+  messages = chatter.data;
+} catch {
+  // Chatter unavailable — the document still renders.
+}
+
+const paymentPending = Astro.url.searchParams.has('tx');
+const pagePath = `/portal/invoices/${invoice.id}`;
+---
+
+<PortalLayout title={invoice.name} active="invoices">
+  <a class="inv__back" href="/portal/invoices">← Back to invoices</a>
+
+  <header class="inv__head">
+    <div>
+      <h1 class="inv__title od-mono">{invoice.name}</h1>
+      <p class="inv__meta">
+        Issued {formatDate(invoice.invoice_date)}
+        {invoice.invoice_date_due && ` · due ${formatDate(invoice.invoice_date_due)}`}
+      </p>
+    </div>
+    <div class="inv__head-actions">
+      <Badge tone={invoiceTone(invoice.payment_state, invoice.is_overdue)}>
+        {invoiceStateLabel(invoice.payment_state, invoice.is_overdue)}
+      </Badge>
+      <Button href={`/api/portal/invoices/${invoice.id}/pdf`} variant="secondary" size="sm">Download PDF</Button>
+    </div>
+  </header>
+
+  {paymentPending && (
+    <Notice tone="info">Payment received — we are confirming it with the payment provider. Refresh this page shortly.</Notice>
+  )}
+
+  <div class="inv__scroll">
+    <table class="inv__lines">
+      <thead>
+        <tr>
+          <th>Description</th>
+          <th class="inv__num">Qty</th>
+          <th class="inv__num">Unit price</th>
+          <th>Taxes</th>
+          <th class="inv__num">Subtotal</th>
+        </tr>
+      </thead>
+      <tbody>
+        {invoice.lines.map((line) => (
+          <tr>
+            <td>{line.name}</td>
+            <td class="inv__num od-mono">{line.quantity}</td>
+            <td class="inv__num od-mono">{formatMoney(line.price_unit, invoice.currency)}</td>
+            <td>{(line.taxes ?? []).join(', ') || '—'}</td>
+            <td class="inv__num od-mono">{formatMoney(line.price_subtotal, invoice.currency)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="inv__totals">
+    {invoice.amount_untaxed !== undefined && (
+      <div class="inv__total-row"><span>Untaxed</span><span class="od-mono">{formatMoney(invoice.amount_untaxed, invoice.currency)}</span></div>
+    )}
+    {invoice.amount_tax !== undefined && (
+      <div class="inv__total-row"><span>Taxes</span><span class="od-mono">{formatMoney(invoice.amount_tax, invoice.currency)}</span></div>
+    )}
+    <div class="inv__total-row inv__total-row--grand"><span>Total</span><span class="od-mono">{formatMoney(invoice.amount_total, invoice.currency)}</span></div>
+    {invoice.amount_residual > 0 && invoice.amount_residual !== invoice.amount_total && (
+      <div class="inv__total-row"><span>Amount due</span><span class="od-mono">{formatMoney(invoice.amount_residual, invoice.currency)}</span></div>
+    )}
+  </div>
+
+  {invoice.requires_payment && !paymentPending && (
+    <Card class="inv__panel">
+      <h2 class="inv__panel-title">Pay this invoice</h2>
+      <PaymentSheet
+        document={`invoice:${invoice.id}`}
+        accessToken={invoice.access_token ?? ''}
+        returnUrl={pagePath}
+        amount={invoice.amount_residual}
+        currency={invoice.currency}
+      />
+    </Card>
+  )}
+
+  <Chatter model="account.move" docId={invoice.id} messages={messages} returnPath={pagePath} />
+</PortalLayout>
+
+<style>
+  .inv__back {
+    display: inline-block;
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-subtle);
+    margin-bottom: var(--od-space-4);
+  }
+  .inv__back:hover { color: var(--od-accent); }
+  .inv__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--od-space-4);
+    flex-wrap: wrap;
+    margin-bottom: var(--od-space-5);
+  }
+  .inv__title { margin-bottom: var(--od-space-1); }
+  .inv__meta {
+    margin: 0;
+    color: var(--od-fg-subtle);
+    font-size: var(--od-text-sm);
+  }
+  .inv__head-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--od-space-3);
+  }
+  .inv__scroll { overflow-x: auto; }
+  .inv__lines {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--od-text-sm);
+  }
+  .inv__lines th {
+    text-align: left;
+    font-size: var(--od-text-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: var(--od-tracking-wide);
+    color: var(--od-fg-subtle);
+    padding: var(--od-space-2) var(--od-space-3);
+    border-bottom: 1px solid var(--od-border-strong);
+  }
+  .inv__lines td {
+    padding: var(--od-space-3);
+    border-bottom: 1px solid var(--od-border);
+    color: var(--od-fg-muted);
+  }
+  .inv__num { text-align: right; }
+  .inv__totals {
+    display: flex;
+    flex-direction: column;
+    gap: var(--od-space-1);
+    align-items: flex-end;
+    padding: var(--od-space-4) var(--od-space-3);
+    margin-bottom: var(--od-space-5);
+  }
+  .inv__total-row {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--od-space-7);
+    min-width: 240px;
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-muted);
+  }
+  .inv__total-row--grand {
+    color: var(--od-fg);
+    font-weight: 650;
+    font-size: var(--od-text-base);
+    border-top: 1px solid var(--od-border-strong);
+    padding-top: var(--od-space-2);
+    margin-top: var(--od-space-1);
+  }
+  :global(.inv__panel) { margin-bottom: var(--od-space-5); }
+  .inv__panel-title { font-size: var(--od-text-lg); }
+</style>

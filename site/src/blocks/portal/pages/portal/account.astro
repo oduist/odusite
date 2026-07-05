@@ -1,0 +1,150 @@
+---
+// Account page: GET/PUT /me — profile + main address. The form POSTs back
+// to this page; 422 field errors re-render inline.
+import Button from '@theme/Button.astro';
+import Input from '@theme/Input.astro';
+import PortalLayout from '../../components/PortalLayout.astro';
+import AddressFields from '../../components/AddressFields.astro';
+import Notice from '../../components/Notice.astro';
+import { apiFetch, OdusiteApiError } from '@lib/api/client';
+import { fieldErrors, formValues, loginRedirect, portalApi } from '../../lib';
+import type { Country, MeProfile } from '../../types';
+
+export const prerender = false;
+if (!Astro.locals.user) return loginRedirect(Astro);
+
+const FIELDS = [
+  'name',
+  'email',
+  'phone',
+  'company_name',
+  'vat',
+  'street',
+  'street2',
+  'city',
+  'zip',
+  'country_id',
+  'state_id',
+];
+
+let errors: Record<string, string> = {};
+let generalError: string | null = null;
+let submitted: Record<string, string> | null = null;
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  submitted = formValues(form, FIELDS);
+  const body: Record<string, unknown> = { ...submitted };
+  body.country_id = submitted.country_id ? Number(submitted.country_id) : null;
+  body.state_id = submitted.state_id ? Number(submitted.state_id) : null;
+  try {
+    await apiFetch(Astro, '/me', { method: 'PUT', body });
+    return Astro.redirect('/portal/account?saved=1', 303);
+  } catch (error) {
+    if (error instanceof OdusiteApiError) {
+      if (error.status === 401) return loginRedirect(Astro);
+      if (error.status === 422) {
+        errors = fieldErrors(error.details);
+        generalError = Object.keys(errors).length ? null : error.message;
+      } else {
+        generalError = error.message;
+      }
+    } else {
+      throw error;
+    }
+  }
+}
+
+const me = await portalApi<MeProfile>(Astro, '/me');
+if (me instanceof Response) return me;
+
+let countries: Country[] = [];
+try {
+  countries = await apiFetch<Country[]>(Astro, '/countries', { auth: false, cart: false });
+} catch {
+  // Country list unavailable — the selects render empty.
+}
+
+const partner = me.partner ?? ({} as MeProfile['partner']);
+const values: Record<string, string> = submitted ?? {
+  name: me.name ?? '',
+  email: me.email ?? '',
+  phone: me.phone ?? '',
+  company_name: partner.company_name ?? '',
+  vat: partner.vat ?? '',
+  street: partner.street ?? '',
+  street2: partner.street2 ?? '',
+  city: partner.city ?? '',
+  zip: partner.zip ?? '',
+  country_id: partner.country_id ? String(partner.country_id) : '',
+  state_id: partner.state_id ? String(partner.state_id) : '',
+};
+
+const saved = Astro.url.searchParams.get('saved') === '1';
+---
+
+<PortalLayout title="Account" active="account">
+  <h1>Account</h1>
+  {saved && <Notice tone="success">Your details have been saved.</Notice>}
+  {generalError && <Notice tone="danger">{generalError}</Notice>}
+
+  <form class="account__form" method="post" action="/portal/account">
+    <fieldset class="account__group">
+      <legend class="account__legend">Contact</legend>
+      <Input label="Name" name="name" required value={values.name} error={errors.name} autocomplete="name" />
+      <div class="account__row">
+        <Input label="Email" name="email" type="email" required value={values.email} error={errors.email} autocomplete="email" />
+        <Input label="Phone" name="phone" type="tel" value={values.phone} error={errors.phone} autocomplete="tel" />
+      </div>
+    </fieldset>
+
+    <fieldset class="account__group">
+      <legend class="account__legend">Company</legend>
+      <div class="account__row">
+        <Input label="Company name" name="company_name" value={values.company_name} error={errors.company_name} autocomplete="organization" />
+        <Input label="VAT number" name="vat" value={values.vat} error={errors.vat} />
+      </div>
+    </fieldset>
+
+    <fieldset class="account__group">
+      <legend class="account__legend">Main address</legend>
+      <AddressFields countries={countries} values={values} errors={errors} />
+    </fieldset>
+
+    <div class="account__actions">
+      <Button type="submit">Save changes</Button>
+    </div>
+  </form>
+</PortalLayout>
+
+<style>
+  .account__form { max-width: 640px; }
+  .account__group {
+    border: none;
+    margin: 0 0 var(--od-space-5);
+    padding: 0;
+  }
+  .account__legend {
+    font-size: var(--od-text-sm);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: var(--od-tracking-wide);
+    color: var(--od-fg-subtle);
+    padding: 0;
+    margin-bottom: var(--od-space-3);
+  }
+  .account__row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--od-space-4);
+  }
+  @media (max-width: 560px) {
+    .account__row { grid-template-columns: 1fr; }
+  }
+  .account__actions {
+    border-top: 1px solid var(--od-border);
+    display: flex;
+    justify-content: flex-end;
+    padding-top: var(--od-space-4);
+  }
+</style>

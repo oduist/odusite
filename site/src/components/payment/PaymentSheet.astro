@@ -1,0 +1,262 @@
+---
+// Headless payment UI (specs/04-payments.md): lists compatible providers,
+// creates the transaction, runs Stripe Payment Element for the "stripe"
+// direct flow, auto-submits redirect providers. Used by shop checkout and
+// portal (orders/invoices).
+import Button from '@theme/Button.astro';
+
+interface Props {
+  /** e.g. "order:42" or "invoice:7" */
+  document: string;
+  accessToken: string;
+  /** Absolute or site-relative URL to land on after payment. */
+  returnUrl: string;
+  amount: number;
+  currency: string;
+}
+const { document: doc, accessToken, returnUrl, amount, currency } = Astro.props;
+const formatted = new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(amount);
+---
+
+<section
+  class="od-pay"
+  data-document={doc}
+  data-access-token={accessToken}
+  data-return-url={returnUrl}
+  data-amount={String(amount)}
+>
+  <div class="od-pay__methods" data-role="methods" aria-busy="true">
+    <p class="od-pay__loading">Loading payment methods…</p>
+  </div>
+  <div class="od-pay__element" data-role="element" hidden></div>
+  <p class="od-pay__error" data-role="error" hidden></p>
+  <Button class="od-pay__submit" type="button" size="lg">Pay {formatted}</Button>
+</section>
+
+<script>
+  interface ProviderInfo {
+    id: number;
+    code: string;
+    name: string;
+    state?: string;
+    payment_methods: { id: number; code: string; name: string; image?: string }[];
+    inline?: { publishable_key?: string };
+  }
+
+  function init(root: HTMLElement) {
+    const doc = root.dataset.document!;
+    const accessToken = root.dataset.accessToken!;
+    const returnUrl = root.dataset.returnUrl!;
+    const methodsBox = root.querySelector<HTMLElement>('[data-role="methods"]')!;
+    const elementBox = root.querySelector<HTMLElement>('[data-role="element"]')!;
+    const errorBox = root.querySelector<HTMLElement>('[data-role="error"]')!;
+    const submit = root.querySelector<HTMLButtonElement>('.od-pay__submit')!;
+
+    let providers: ProviderInfo[] = [];
+    let selected: { provider: ProviderInfo; methodId: number } | null = null;
+    let stripe: unknown = null;
+    let stripeElements: { submit?: () => Promise<{ error?: Error }> } | null = null;
+
+    const showError = (message: string) => {
+      errorBox.textContent = message;
+      errorBox.hidden = !message;
+    };
+
+    async function loadMethods() {
+      const response = await fetch(
+        `/api/payment/methods?document=${encodeURIComponent(doc)}&access_token=${encodeURIComponent(accessToken)}`,
+      );
+      const payload = await response.json();
+      if (!response.ok) {
+        showError(payload.error?.message ?? 'Unable to load payment methods.');
+        return;
+      }
+      providers = payload.data.providers ?? [];
+      methodsBox.setAttribute('aria-busy', 'false');
+      if (!providers.length) {
+        methodsBox.innerHTML = '<p>No payment methods available.</p>';
+        submit.disabled = true;
+        return;
+      }
+      methodsBox.innerHTML = '';
+      for (const provider of providers) {
+        for (const method of provider.payment_methods) {
+          const id = `pay-${provider.id}-${method.id}`;
+          const label = document.createElement('label');
+          label.className = 'od-pay__option';
+          label.innerHTML =
+            `<input type="radio" name="od-pay-method" id="${id}" />` +
+            `<span>${method.name}</span>` +
+            (provider.state === 'test' ? '<em class="od-pay__test">test</em>' : '');
+          label.querySelector('input')!.addEventListener('change', () => {
+            selected = { provider, methodId: method.id };
+            void prepareInline();
+          });
+          methodsBox.appendChild(label);
+        }
+      }
+      const first = methodsBox.querySelector<HTMLInputElement>('input');
+      if (first) {
+        first.checked = true;
+        first.dispatchEvent(new Event('change'));
+      }
+    }
+
+    async function loadStripeJs(): Promise<unknown> {
+      const w = window as unknown as Record<string, unknown>;
+      if (w.Stripe) return w.Stripe;
+      await new Promise<void>((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://js.stripe.com/v3/';
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error('Failed to load Stripe.js'));
+        document.head.appendChild(script);
+      });
+      return w.Stripe;
+    }
+
+    async function createTransaction(): Promise<Record<string, never> | null> {
+      const response = await fetch('/api/payment/transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          document: doc,
+          access_token: accessToken,
+          provider_id: selected!.provider.id,
+          payment_method_id: selected!.methodId,
+          flow: selected!.provider.code === 'stripe' ? 'direct' : 'redirect',
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        showError(payload.error?.message ?? 'Payment failed to start.');
+        return null;
+      }
+      return payload.data;
+    }
+
+    async function prepareInline() {
+      showError('');
+      elementBox.hidden = true;
+      elementBox.innerHTML = '';
+      stripeElements = null;
+    }
+
+    submit.addEventListener('click', async () => {
+      if (!selected) return;
+      submit.disabled = true;
+      showError('');
+      try {
+        const tx = (await createTransaction()) as {
+          transaction_id: number;
+          processing_values?: {
+            client_secret?: string;
+            publishable_key?: string;
+            redirect_url?: string;
+            form_data?: Record<string, string>;
+          };
+        } | null;
+        if (!tx) return;
+        const values = tx.processing_values ?? {};
+        const landing = new URL(returnUrl, window.location.origin);
+        landing.searchParams.set('tx', String(tx.transaction_id));
+        landing.searchParams.set('access_token', accessToken);
+
+        if (selected.provider.code === 'stripe' && values.client_secret && values.publishable_key) {
+          const StripeCtor = (await loadStripeJs()) as (
+            key: string,
+          ) => {
+            elements: (opts: object) => { create: (kind: string) => { mount: (el: Element) => void } };
+            confirmPayment: (opts: object) => Promise<{ error?: { message?: string } }>;
+          };
+          const stripeClient = StripeCtor(values.publishable_key);
+          const elements = stripeClient.elements({
+            clientSecret: values.client_secret,
+            appearance: { theme: 'night' },
+          });
+          elementBox.hidden = false;
+          const paymentElement = elements.create('payment');
+          paymentElement.mount(elementBox);
+          // Second click confirms once the element is filled.
+          submit.disabled = false;
+          submit.onclick = async () => {
+            submit.disabled = true;
+            const { error } = await stripeClient.confirmPayment({
+              elements,
+              confirmParams: { return_url: landing.toString() },
+            });
+            if (error) {
+              showError(error.message ?? 'Payment failed.');
+              submit.disabled = false;
+            }
+          };
+          return;
+        }
+
+        if (values.redirect_url) {
+          const form = document.createElement('form');
+          form.method = 'POST';
+          form.action = values.redirect_url;
+          for (const [key, value] of Object.entries(values.form_data ?? {})) {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = key;
+            input.value = value;
+            form.appendChild(input);
+          }
+          document.body.appendChild(form);
+          form.submit();
+          return;
+        }
+
+        // Token flow or immediate result: go straight to the landing page.
+        window.location.assign(landing.toString());
+      } finally {
+        submit.disabled = false;
+      }
+    });
+
+    void loadMethods();
+  }
+
+  document.querySelectorAll<HTMLElement>('.od-pay').forEach(init);
+</script>
+
+<style>
+  .od-pay {
+    display: flex;
+    flex-direction: column;
+    gap: var(--od-space-4);
+  }
+  .od-pay__methods {
+    display: flex;
+    flex-direction: column;
+    gap: var(--od-space-2);
+  }
+  .od-pay__loading { color: var(--od-fg-subtle); margin: 0; }
+  .od-pay :global(.od-pay__option) {
+    display: flex;
+    align-items: center;
+    gap: var(--od-space-3);
+    padding: var(--od-space-3) var(--od-space-4);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-m);
+    cursor: pointer;
+    transition: border-color var(--od-dur-fast) var(--od-ease);
+  }
+  .od-pay :global(.od-pay__option:hover) { border-color: var(--od-border-strong); }
+  .od-pay :global(.od-pay__option:has(input:checked)) { border-color: var(--od-accent); }
+  .od-pay :global(.od-pay__test) {
+    margin-left: auto;
+    color: var(--od-warning);
+    font-size: var(--od-text-xs);
+    text-transform: uppercase;
+  }
+  .od-pay__element {
+    padding: var(--od-space-4);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-m);
+    background: var(--od-bg-inset);
+  }
+  .od-pay__error { color: var(--od-danger); margin: 0; }
+</style>

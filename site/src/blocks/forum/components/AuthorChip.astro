@@ -1,0 +1,74 @@
+---
+// Author avatar + name (links to the public profile) + karma.
+import { imgUrl } from '@lib/api/client';
+import type { ForumAuthor } from '../types';
+
+interface Props {
+  author: ForumAuthor;
+  /** Prefix label, e.g. "asked" / "answered". */
+  label?: string;
+  /** Formatted date rendered after the name. */
+  date?: string;
+}
+const { author, label, date } = Astro.props;
+const avatar = imgUrl(author.avatar);
+---
+
+<div class="author">
+  {avatar ? (
+    <img class="author__avatar" src={avatar} alt="" width="24" height="24" loading="lazy" />
+  ) : (
+    <span class="author__avatar author__avatar--fallback" aria-hidden="true">
+      {author.name.slice(0, 1).toUpperCase()}
+    </span>
+  )}
+  {label && <span class="author__label">{label}</span>}
+  <a class="author__name" href={`/forum/users/${author.id}`}>{author.name}</a>
+  <span class="author__karma od-mono" title="Karma">{author.karma}</span>
+  {date && <span class="author__date">{date}</span>}
+</div>
+
+<style>
+  .author {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--od-space-2);
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-muted);
+    min-width: 0;
+  }
+  .author__avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: var(--od-radius-full);
+    object-fit: cover;
+    flex: none;
+  }
+  .author__avatar--fallback {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--od-accent-soft);
+    color: var(--od-accent);
+    font-size: var(--od-text-xs);
+    font-weight: 600;
+  }
+  .author__label { color: var(--od-fg-subtle); }
+  .author__name {
+    color: var(--od-fg);
+    font-weight: 550;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .author__name:hover { color: var(--od-accent); }
+  .author__karma {
+    padding: 0 var(--od-space-2);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-full);
+    font-size: var(--od-text-xs);
+    color: var(--od-fg-muted);
+    background: var(--od-bg-inset);
+  }
+  .author__date { color: var(--od-fg-subtle); }
+</style>

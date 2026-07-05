@@ -1,0 +1,163 @@
+---
+// /forum/ask — ask a question (login required).
+import Base from '@layouts/Base.astro';
+import Button from '@theme/Button.astro';
+import EmptyState from '@theme/EmptyState.astro';
+import Input from '@theme/Input.astro';
+import { apiFetch } from '@lib/api/client';
+import type { ForumSummary } from '../types';
+
+export const prerender = false;
+
+if (!Astro.locals.user) {
+  return Astro.redirect(
+    `/login?next=${encodeURIComponent(`/forum/ask${Astro.url.search}`)}`,
+  );
+}
+
+const forums = await apiFetch<ForumSummary[]>(Astro, '/forum/forums', { cart: false });
+const preselect = Astro.url.searchParams.get('forum') ?? '';
+const selectedId =
+  forums.find((f) => String(f.id) === preselect || f.slug === preselect)?.id ?? forums[0]?.id;
+---
+
+<Base title="Ask a question — Forum" noindex>
+  <section class="od-section od-container ask">
+    <nav class="ask__crumbs" aria-label="Breadcrumb">
+      <a href="/forum">Forum</a> <span aria-hidden="true">/</span> Ask
+    </nav>
+    <h1>Ask a question</h1>
+
+    {forums.length === 0 ? (
+      <EmptyState title="No forums available" description="There is no forum to post into yet.">
+        <Button href="/forum">Back to forum</Button>
+      </EmptyState>
+    ) : (
+      <form class="ask__form" data-ask-form novalidate>
+        <div class="ask__field">
+          <label class="ask__label" for="ask-forum">Forum</label>
+          <select class="ask__select" id="ask-forum" name="forum_id" required>
+            {forums.map((forum) => (
+              <option value={forum.id} data-slug={forum.slug} selected={forum.id === selectedId}>
+                {forum.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <Input
+          label="Title"
+          name="name"
+          required
+          placeholder="Be specific — summarize the problem in one sentence"
+        />
+        <Input
+          label="Details"
+          name="content"
+          textarea
+          rows={10}
+          required
+          placeholder="Describe what you tried and what you expected. Markdown-lite is supported."
+        />
+        <Input label="Tags" name="tags" placeholder="Comma-separated, e.g. deployment, api" />
+        <p class="ask__error" data-ask-error role="alert" hidden></p>
+        <Button type="submit">Post your question</Button>
+      </form>
+    )}
+  </section>
+</Base>
+
+<script>
+  type ApiError = { code?: string; message?: string; details?: Record<string, unknown> };
+
+  const form = document.querySelector<HTMLFormElement>('form[data-ask-form]');
+  const errorBox = document.querySelector<HTMLElement>('[data-ask-error]');
+
+  function showError(message: string): void {
+    if (!errorBox) return;
+    errorBox.textContent = message;
+    errorBox.hidden = false;
+  }
+
+  form?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (errorBox) errorBox.hidden = true;
+
+    const data = new FormData(form);
+    const name = String(data.get('name') ?? '').trim();
+    const content = String(data.get('content') ?? '').trim();
+    const forumId = Number(data.get('forum_id'));
+    const tags = String(data.get('tags') ?? '')
+      .split(',')
+      .map((tag) => tag.trim())
+      .filter(Boolean);
+
+    if (!forumId || !name || !content) {
+      showError('Please pick a forum and fill in the title and details.');
+      return;
+    }
+
+    const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+    if (submit) submit.disabled = true;
+
+    const response = await fetch('/api/forum/ask', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ forum_id: forumId, name, content, tags }),
+    });
+    const payload = (await response.json().catch(() => ({}))) as {
+      data?: { id?: number; slug?: string };
+      error?: ApiError;
+    };
+
+    if (response.ok && payload.data) {
+      const select = form.querySelector<HTMLSelectElement>('select[name="forum_id"]');
+      const forumSlug = select?.selectedOptions[0]?.dataset.slug ?? '';
+      const target = payload.data.slug ?? String(payload.data.id ?? '');
+      window.location.href =
+        forumSlug && target ? `/forum/${forumSlug}/${target}` : '/forum';
+      return;
+    }
+
+    if (submit) submit.disabled = false;
+    if (payload.error?.code === 'login_required') {
+      window.location.href = `/login?next=${encodeURIComponent('/forum/ask')}`;
+      return;
+    }
+    showError(payload.error?.message ?? 'Could not post the question. Please try again.');
+  });
+</script>
+
+<style>
+  .ask__crumbs {
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-subtle);
+    margin-bottom: var(--od-space-3);
+  }
+  .ask__form { max-width: 80ch; }
+  .ask__field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--od-space-1);
+    margin-bottom: var(--od-space-4);
+  }
+  .ask__label {
+    font-size: var(--od-text-sm);
+    font-weight: 550;
+    color: var(--od-fg);
+  }
+  .ask__select {
+    font: inherit;
+    color: var(--od-fg);
+    background: var(--od-bg-inset);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-m);
+    padding: var(--od-space-2) var(--od-space-3);
+    max-width: 40ch;
+  }
+  .ask__select:focus { border-color: var(--od-accent); outline: none; }
+  .ask__error {
+    color: var(--od-danger);
+    font-size: var(--od-text-sm);
+    margin-bottom: var(--od-space-4);
+  }
+</style>

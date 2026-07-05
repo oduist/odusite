@@ -1,0 +1,94 @@
+---
+// Catalog grid card: image (hover-swaps to second_image), name, price with
+// strikethrough list_price when discounted.
+import Card from '@theme/Card.astro';
+import { imgUrl } from '@lib/api/client';
+import { formatMoney } from '../lib';
+import type { ProductListItem } from '../types';
+
+interface Props {
+  product: ProductListItem;
+  lang: string;
+}
+const { product, lang } = Astro.props;
+const image = imgUrl(product.image);
+const secondImage = imgUrl(product.second_image);
+---
+
+<Card href={`/shop/${product.slug}`} padded={false} class="shop-card">
+  <div class="shop-card__media">
+    {image ? (
+      <img src={image} alt={product.name} loading="lazy" width="400" height="400" />
+    ) : (
+      <div class="shop-card__placeholder" aria-hidden="true"></div>
+    )}
+    {secondImage && (
+      <img
+        class="shop-card__second"
+        src={secondImage}
+        alt=""
+        loading="lazy"
+        width="400"
+        height="400"
+        aria-hidden="true"
+      />
+    )}
+  </div>
+  <div class="shop-card__body">
+    <h3 class="shop-card__name">{product.name}</h3>
+    <p class="shop-card__price od-mono">
+      {product.has_discounted_price && (
+        <s class="shop-card__list">{formatMoney(product.list_price, product.currency, lang)}</s>
+      )}
+      <span>{formatMoney(product.price, product.currency, lang)}</span>
+    </p>
+  </div>
+</Card>
+
+<style>
+  .shop-card__media {
+    position: relative;
+    aspect-ratio: 1 / 1;
+    background: var(--od-bg-inset);
+    overflow: hidden;
+  }
+  .shop-card__media img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .shop-card__second {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity var(--od-dur-base) var(--od-ease);
+  }
+  :global(.shop-card:hover) .shop-card__second {
+    opacity: 1;
+  }
+  .shop-card__placeholder {
+    width: 100%;
+    height: 100%;
+    background: var(--od-bg-inset);
+  }
+  .shop-card__body {
+    padding: var(--od-space-4);
+  }
+  .shop-card__name {
+    font-size: var(--od-text-base);
+    font-weight: 600;
+    margin: 0 0 var(--od-space-1);
+    color: var(--od-fg);
+  }
+  .shop-card__price {
+    margin: 0;
+    display: flex;
+    gap: var(--od-space-2);
+    align-items: baseline;
+    color: var(--od-fg);
+    font-size: var(--od-text-sm);
+  }
+  .shop-card__list {
+    color: var(--od-fg-subtle);
+  }
+</style>

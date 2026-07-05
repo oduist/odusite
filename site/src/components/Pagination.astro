@@ -1,0 +1,60 @@
+---
+import type { ListMeta } from '@lib/api/client';
+
+interface Props {
+  meta: ListMeta;
+  /** Base URL; page is appended as ?page=N preserving other params. */
+  url: URL;
+}
+const { meta, url } = Astro.props;
+
+function pageUrl(page: number): string {
+  const next = new URL(url);
+  if (page <= 1) next.searchParams.delete('page');
+  else next.searchParams.set('page', String(page));
+  return next.pathname + next.search;
+}
+
+const pages: number[] = [];
+for (let p = Math.max(1, meta.page - 2); p <= Math.min(meta.pages, meta.page + 2); p++) pages.push(p);
+---
+
+{meta.pages > 1 && (
+  <nav class="od-pager" aria-label="Pagination">
+    {meta.page > 1 && <a href={pageUrl(meta.page - 1)} rel="prev">←</a>}
+    {pages[0] > 1 && <a href={pageUrl(1)}>1</a>}
+    {pages[0] > 2 && <span>…</span>}
+    {pages.map((p) =>
+      p === meta.page ? <span class="current" aria-current="page">{p}</span> : <a href={pageUrl(p)}>{p}</a>,
+    )}
+    {pages[pages.length - 1] < meta.pages - 1 && <span>…</span>}
+    {pages[pages.length - 1] < meta.pages && <a href={pageUrl(meta.pages)}>{meta.pages}</a>}
+    {meta.page < meta.pages && <a href={pageUrl(meta.page + 1)} rel="next">→</a>}
+  </nav>
+)}
+
+<style>
+  .od-pager {
+    display: flex;
+    gap: var(--od-space-2);
+    justify-content: center;
+    padding-block: var(--od-space-6);
+    font-size: var(--od-text-sm);
+  }
+  .od-pager a,
+  .od-pager span {
+    min-width: 34px;
+    height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--od-radius-s);
+    color: var(--od-fg-muted);
+  }
+  .od-pager a:hover { background: var(--od-bg-hover); color: var(--od-fg); }
+  .od-pager .current {
+    background: var(--od-accent);
+    color: var(--od-accent-fg);
+    font-weight: 600;
+  }
+</style>

@@ -1,0 +1,203 @@
+---
+// Task detail: GET /my/tasks/<id> — description HTML, stage badge,
+// attachments, timesheet summary + chatter (project.task whitelisted).
+import Badge from '@theme/Badge.astro';
+import Card from '@theme/Card.astro';
+import PortalLayout from '../../../components/PortalLayout.astro';
+import Chatter from '../../../components/Chatter.astro';
+import { getEnv } from '@lib/env';
+import { formatDate, loginRedirect, portalApi, taskStateTone } from '../../../lib';
+import type { ApiListResult } from '@lib/api/client';
+import type { ChatterMessage, TaskDetail } from '../../../types';
+
+export const prerender = false;
+if (!Astro.locals.user) return loginRedirect(Astro);
+
+const id = Number(Astro.params.id);
+if (!Number.isInteger(id) || id <= 0) return await Astro.rewrite('/404');
+
+const task = await portalApi<TaskDetail>(Astro, `/my/tasks/${id}`);
+if (task instanceof Response) return task;
+
+let messages: ChatterMessage[] = [];
+try {
+  const chatter = await portalApi<ApiListResult<ChatterMessage>>(
+    Astro,
+    `/chatter/project.task/${id}/messages`,
+    { query: { limit: 30 } },
+  );
+  if (chatter instanceof Response) return chatter;
+  messages = chatter.data;
+} catch {
+  // Chatter unavailable — the document still renders.
+}
+
+// Attachment URLs are token-signed by Odoo; relative ones point at the Odoo
+// host, not the site, so resolve them against ODOO_URL.
+const env = getEnv(Astro);
+function attachmentHref(url: string): string {
+  return url.startsWith('/') ? new URL(url, env.ODOO_URL).toString() : url;
+}
+
+const pagePath = `/portal/tasks/${task.id}`;
+---
+
+<PortalLayout title={task.name} active="projects">
+  <a class="task__back" href="/portal/tasks">← Back to tasks</a>
+
+  <header class="task__head">
+    <div>
+      <h1 class="task__title">{task.name}</h1>
+      <p class="task__meta">
+        {task.project && (
+          <>
+            <a href={`/portal/tasks?project=${task.project.id}`}>{task.project.name}</a>
+            {' · '}
+          </>
+        )}
+        {task.deadline ? `deadline ${formatDate(task.deadline)}` : 'no deadline'}
+        {(task.assignees ?? []).length > 0 && ` · assigned to ${(task.assignees ?? []).join(', ')}`}
+      </p>
+    </div>
+    {task.stage && <Badge tone={taskStateTone(task.state)}>{task.stage}</Badge>}
+  </header>
+
+  {task.description_html ? (
+    <div class="task__description" set:html={task.description_html} />
+  ) : (
+    <p class="task__no-description">No description.</p>
+  )}
+
+  {(task.attachments ?? []).length > 0 && (
+    <Card class="task__panel">
+      <h2 class="task__panel-title">Attachments</h2>
+      <ul class="task__attachments">
+        {(task.attachments ?? []).map((attachment) => (
+          <li>
+            <a href={attachmentHref(attachment.url)} target="_blank" rel="noopener">{attachment.name}</a>
+            {attachment.mimetype && <span class="task__mime">{attachment.mimetype}</span>}
+          </li>
+        ))}
+      </ul>
+    </Card>
+  )}
+
+  {(task.subtasks ?? []).length > 0 && (
+    <Card class="task__panel">
+      <h2 class="task__panel-title">Sub-tasks</h2>
+      <ul class="task__subtasks">
+        {(task.subtasks ?? []).map((subtask) => (
+          <li><a href={`/portal/tasks/${subtask.id}`}>{subtask.name}</a></li>
+        ))}
+      </ul>
+    </Card>
+  )}
+
+  {task.timesheets && task.timesheets.lines.length > 0 && (
+    <Card class="task__panel">
+      <h2 class="task__panel-title">Timesheets</h2>
+      <table class="task__timesheets">
+        <thead>
+          <tr><th>Date</th><th>Description</th><th class="task__num">Hours</th></tr>
+        </thead>
+        <tbody>
+          {task.timesheets.lines.map((line) => (
+            <tr>
+              <td>{formatDate(line.date)}</td>
+              <td>{line.name}</td>
+              <td class="task__num od-mono">{line.hours.toFixed(2)}</td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="2">Total</td>
+            <td class="task__num od-mono">{task.timesheets.total_hours.toFixed(2)}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </Card>
+  )}
+
+  <Chatter model="project.task" docId={task.id} messages={messages} returnPath={pagePath} />
+</PortalLayout>
+
+<style>
+  .task__back {
+    display: inline-block;
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-subtle);
+    margin-bottom: var(--od-space-4);
+  }
+  .task__back:hover { color: var(--od-accent); }
+  .task__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--od-space-4);
+    flex-wrap: wrap;
+    margin-bottom: var(--od-space-5);
+  }
+  .task__title { margin-bottom: var(--od-space-1); }
+  .task__meta {
+    margin: 0;
+    color: var(--od-fg-subtle);
+    font-size: var(--od-text-sm);
+  }
+  .task__description {
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-muted);
+    margin-bottom: var(--od-space-6);
+    overflow-wrap: anywhere;
+  }
+  .task__description :global(img) { max-width: 100%; }
+  .task__description :global(p) { margin: 0 0 var(--od-space-3); }
+  .task__no-description {
+    color: var(--od-fg-subtle);
+    font-size: var(--od-text-sm);
+    margin-bottom: var(--od-space-6);
+  }
+  :global(.task__panel) { margin-bottom: var(--od-space-5); }
+  .task__panel-title { font-size: var(--od-text-lg); }
+  .task__attachments,
+  .task__subtasks {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--od-space-2);
+    font-size: var(--od-text-sm);
+  }
+  .task__mime {
+    color: var(--od-fg-subtle);
+    font-size: var(--od-text-xs);
+    margin-left: var(--od-space-2);
+  }
+  .task__timesheets {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--od-text-sm);
+  }
+  .task__timesheets th {
+    text-align: left;
+    font-size: var(--od-text-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: var(--od-tracking-wide);
+    color: var(--od-fg-subtle);
+    padding: var(--od-space-2) var(--od-space-3);
+    border-bottom: 1px solid var(--od-border-strong);
+  }
+  .task__timesheets td {
+    padding: var(--od-space-2) var(--od-space-3);
+    border-bottom: 1px solid var(--od-border);
+    color: var(--od-fg-muted);
+  }
+  .task__timesheets tfoot td {
+    border-bottom: none;
+    font-weight: 600;
+    color: var(--od-fg);
+  }
+  .task__num { text-align: right; }
+</style>

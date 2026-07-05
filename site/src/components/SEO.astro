@@ -1,0 +1,27 @@
+---
+import { getEnv } from '@lib/env';
+import { imgUrl } from '@lib/api/client';
+
+interface Props {
+  title: string;
+  description?: string;
+  ogImage?: string | null;
+  ogType?: string;
+  noindex?: boolean;
+}
+const { title, description = '', ogImage, ogType = 'website', noindex = false } = Astro.props;
+const env = getEnv(Astro);
+const canonical = new URL(Astro.url.pathname, env.PUBLIC_SITE_URL || Astro.url.origin);
+const image = imgUrl(ogImage);
+---
+
+<title>{title}</title>
+{description && <meta name="description" content={description} />}
+<link rel="canonical" href={canonical} />
+{noindex && <meta name="robots" content="noindex, nofollow" />}
+<meta property="og:title" content={title} />
+{description && <meta property="og:description" content={description} />}
+<meta property="og:type" content={ogType} />
+<meta property="og:url" content={canonical} />
+{image && <meta property="og:image" content={new URL(image, canonical)} />}
+<meta name="twitter:card" content={image ? 'summary_large_image' : 'summary'} />

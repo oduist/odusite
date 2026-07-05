@@ -1,0 +1,133 @@
+---
+// Portal invoices list: GET /my/invoices with state filter chips
+// (specs/modules/odusite_account.md).
+import Badge from '@theme/Badge.astro';
+import EmptyState from '@theme/EmptyState.astro';
+import Pagination from '@components/Pagination.astro';
+import PortalLayout from '../../../components/PortalLayout.astro';
+import {
+  formatDate,
+  formatMoney,
+  invoiceStateLabel,
+  invoiceTone,
+  loginRedirect,
+  portalApi,
+} from '../../../lib';
+import type { ApiListResult } from '@lib/api/client';
+import type { InvoiceListItem } from '../../../types';
+
+export const prerender = false;
+if (!Astro.locals.user) return loginRedirect(Astro);
+
+const FILTERS = [
+  { key: '', label: 'All' },
+  { key: 'open', label: 'Open' },
+  { key: 'paid', label: 'Paid' },
+  { key: 'overdue', label: 'Overdue' },
+];
+const state = Astro.url.searchParams.get('state') ?? '';
+const page = Number(Astro.url.searchParams.get('page') ?? '1') || 1;
+
+const result = await portalApi<ApiListResult<InvoiceListItem>>(Astro, '/my/invoices', {
+  query: { state: state || undefined, page },
+});
+if (result instanceof Response) return result;
+---
+
+<PortalLayout title="Invoices" active="invoices">
+  <h1>Invoices</h1>
+
+  <nav class="inv__filters" aria-label="Invoice filters">
+    {FILTERS.map((filter) => (
+      <a
+        href={filter.key ? `/portal/invoices?state=${filter.key}` : '/portal/invoices'}
+        class:list={['inv__filter', { 'inv__filter--active': state === filter.key }]}
+        aria-current={state === filter.key ? 'true' : undefined}
+      >{filter.label}</a>
+    ))}
+  </nav>
+
+  {result.data.length === 0 ? (
+    <EmptyState title="No invoices" description="Invoices issued to you will appear here." />
+  ) : (
+    <div class="inv__scroll">
+      <table class="inv__table">
+        <thead>
+          <tr>
+            <th>Reference</th>
+            <th>Date</th>
+            <th>Due</th>
+            <th>Status</th>
+            <th class="inv__num">Total</th>
+            <th class="inv__num">Due amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          {result.data.map((invoice) => (
+            <tr>
+              <td><a class="inv__ref od-mono" href={`/portal/invoices/${invoice.id}`}>{invoice.name}</a></td>
+              <td>{formatDate(invoice.invoice_date)}</td>
+              <td>{formatDate(invoice.invoice_date_due)}</td>
+              <td>
+                <Badge tone={invoiceTone(invoice.payment_state, invoice.is_overdue)}>
+                  {invoiceStateLabel(invoice.payment_state, invoice.is_overdue)}
+                </Badge>
+              </td>
+              <td class="inv__num od-mono">{formatMoney(invoice.amount_total, invoice.currency)}</td>
+              <td class="inv__num od-mono">{formatMoney(invoice.amount_residual, invoice.currency)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )}
+  <Pagination meta={result.meta} url={Astro.url} />
+</PortalLayout>
+
+<style>
+  .inv__filters {
+    display: flex;
+    gap: var(--od-space-2);
+    margin-bottom: var(--od-space-5);
+    flex-wrap: wrap;
+  }
+  .inv__filter {
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-muted);
+    padding: var(--od-space-1) var(--od-space-3);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-full);
+    transition:
+      border-color var(--od-dur-fast) var(--od-ease),
+      color var(--od-dur-fast) var(--od-ease);
+  }
+  .inv__filter:hover { border-color: var(--od-border-strong); color: var(--od-fg); }
+  .inv__filter--active {
+    border-color: var(--od-accent);
+    color: var(--od-accent);
+    background: var(--od-accent-soft);
+  }
+  .inv__scroll { overflow-x: auto; }
+  .inv__table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--od-text-sm);
+  }
+  .inv__table th {
+    text-align: left;
+    font-size: var(--od-text-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: var(--od-tracking-wide);
+    color: var(--od-fg-subtle);
+    padding: var(--od-space-2) var(--od-space-3);
+    border-bottom: 1px solid var(--od-border-strong);
+  }
+  .inv__table td {
+    padding: var(--od-space-3);
+    border-bottom: 1px solid var(--od-border);
+    color: var(--od-fg-muted);
+  }
+  .inv__ref { font-weight: 600; }
+  .inv__num { text-align: right; }
+</style>

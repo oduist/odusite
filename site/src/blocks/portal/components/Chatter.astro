@@ -1,0 +1,149 @@
+---
+// Portal document chatter: message history + comment form
+// (specs/modules/odusite_portal.md — shared portal messaging).
+import Button from '@theme/Button.astro';
+import EmptyState from '@theme/EmptyState.astro';
+import Notice from './Notice.astro';
+import { imgUrl } from '@lib/api/client';
+import { formatDateTime } from '../lib';
+import type { ChatterMessage } from '../types';
+
+interface Props {
+  model: string;
+  docId: number;
+  messages: ChatterMessage[];
+  /** Path to return to after posting (this page). */
+  returnPath: string;
+}
+const { model, docId, messages, returnPath } = Astro.props;
+
+const posted = Astro.url.searchParams.get('posted') === '1';
+const failed = Astro.url.searchParams.get('error') === 'chatter';
+---
+
+<section class="chatter" id="chatter" aria-label="Messages">
+  <h2 class="chatter__title">Messages</h2>
+  {posted && <Notice tone="success">Your message has been posted.</Notice>}
+  {failed && <Notice tone="danger">Your message could not be posted. Please try again.</Notice>}
+
+  {messages.length === 0 ? (
+    <EmptyState title="No messages yet" description="Questions about this document? Write to us below." />
+  ) : (
+    <ol class="chatter__list">
+      {messages.map((message) => (
+        <li class="chatter__item">
+          <div class="chatter__meta">
+            {message.author.avatar && (
+              <img class="chatter__avatar" src={imgUrl(message.author.avatar)} alt="" width="28" height="28" loading="lazy" />
+            )}
+            <span class="chatter__author">{message.author.name}</span>
+            <time class="chatter__date" datetime={message.date}>{formatDateTime(message.date)}</time>
+          </div>
+          <div class="chatter__body" set:html={message.body} />
+          {(message.attachments ?? []).length > 0 && (
+            <ul class="chatter__attachments">
+              {(message.attachments ?? []).map((attachment) =>
+                attachment.url ? (
+                  <li><a href={attachment.url} target="_blank" rel="noopener">{attachment.name}</a></li>
+                ) : (
+                  <li>{attachment.name}</li>
+                ),
+              )}
+            </ul>
+          )}
+        </li>
+      ))}
+    </ol>
+  )}
+
+  <form class="chatter__form" method="post" action="/api/portal/chatter">
+    <input type="hidden" name="model" value={model} />
+    <input type="hidden" name="id" value={String(docId)} />
+    <input type="hidden" name="return" value={returnPath} />
+    <label class="chatter__label" for="chatter-body">Add a message</label>
+    <textarea class="chatter__input" id="chatter-body" name="body" rows="4" required placeholder="Write your message…"></textarea>
+    <div class="chatter__actions">
+      <Button type="submit" variant="secondary">Send message</Button>
+    </div>
+  </form>
+</section>
+
+<style>
+  .chatter {
+    margin-top: var(--od-space-7);
+    padding-top: var(--od-space-6);
+    border-top: 1px solid var(--od-border);
+  }
+  .chatter__title { font-size: var(--od-text-lg); }
+  .chatter__list {
+    list-style: none;
+    margin: 0 0 var(--od-space-5);
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--od-space-4);
+  }
+  .chatter__item {
+    background: var(--od-bg-raised);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-m);
+    padding: var(--od-space-4);
+  }
+  .chatter__meta {
+    display: flex;
+    align-items: center;
+    gap: var(--od-space-2);
+    margin-bottom: var(--od-space-2);
+  }
+  .chatter__avatar {
+    border-radius: var(--od-radius-full);
+    height: 28px;
+    width: 28px;
+    object-fit: cover;
+  }
+  .chatter__author {
+    font-weight: 600;
+    font-size: var(--od-text-sm);
+  }
+  .chatter__date {
+    color: var(--od-fg-subtle);
+    font-size: var(--od-text-xs);
+    margin-left: auto;
+  }
+  .chatter__body {
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-muted);
+    overflow-wrap: anywhere;
+  }
+  .chatter__body :global(p) { margin: 0 0 var(--od-space-2); }
+  .chatter__body :global(img) { max-width: 100%; }
+  .chatter__attachments {
+    list-style: none;
+    margin: var(--od-space-3) 0 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--od-space-3);
+    font-size: var(--od-text-xs);
+  }
+  .chatter__form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--od-space-2);
+  }
+  .chatter__label {
+    font-size: var(--od-text-sm);
+    font-weight: 550;
+  }
+  .chatter__input {
+    font: inherit;
+    color: var(--od-fg);
+    background: var(--od-bg-inset);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-m);
+    padding: var(--od-space-3);
+    resize: vertical;
+  }
+  .chatter__input:focus { border-color: var(--od-accent); outline: none; }
+  .chatter__actions { display: flex; justify-content: flex-end; }
+</style>

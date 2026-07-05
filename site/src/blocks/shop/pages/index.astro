@@ -1,0 +1,30 @@
+---
+// /shop — product grid with category sidebar, attribute facets, sort,
+// search and price range. Edge-cached for anonymous visitors (tag: shop).
+import Base from '@layouts/Base.astro';
+import Catalog from '../components/Catalog.astro';
+import { catalogQueryFromUrl, fetchCategories, fetchProducts } from '../lib';
+
+export const prerender = false;
+
+const query = catalogQueryFromUrl(Astro.url);
+const [listing, categories] = await Promise.all([
+  fetchProducts(Astro, query),
+  fetchCategories(Astro).catch(() => []),
+]);
+
+Astro.response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=600');
+Astro.response.headers.set('X-Odusite-Tags', 'shop');
+---
+
+<Base title="Shop" description="Browse the product catalog.">
+  <div class="od-container od-section">
+    <h1>Shop</h1>
+    <Catalog
+      url={Astro.url}
+      listing={listing}
+      categories={categories}
+      lang={Astro.locals.lang}
+    />
+  </div>
+</Base>

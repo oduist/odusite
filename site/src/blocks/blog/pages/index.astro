@@ -1,0 +1,126 @@
+---
+import Base from '@layouts/Base.astro';
+import Pagination from '@components/Pagination.astro';
+import Badge from '@theme/Badge.astro';
+import Button from '@theme/Button.astro';
+import EmptyState from '@theme/EmptyState.astro';
+import Input from '@theme/Input.astro';
+import { apiFetch, type ApiListResult } from '@lib/api/client';
+import PostCard from '../components/PostCard.astro';
+import type { BlogPostListItem, BlogTagSummary } from '../types';
+
+export const prerender = false;
+
+const url = Astro.url;
+const page = Math.max(1, Number(url.searchParams.get('page')) || 1);
+const tag = url.searchParams.get('tag') || undefined;
+const search = url.searchParams.get('search') || undefined;
+
+const [posts, tags] = await Promise.all([
+  apiFetch<ApiListResult<BlogPostListItem>>(Astro, '/blog/posts', {
+    query: { page, limit: 12, tag, search },
+    auth: false,
+    cart: false,
+  }),
+  apiFetch<BlogTagSummary[]>(Astro, '/blog/tags', { auth: false, cart: false }),
+]);
+
+Astro.response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=600');
+Astro.response.headers.set('X-Odusite-Tags', 'blog');
+
+function filterUrl(nextTag?: string): string {
+  const next = new URL(url);
+  next.searchParams.delete('page');
+  if (nextTag) next.searchParams.set('tag', nextTag);
+  else next.searchParams.delete('tag');
+  return next.pathname + next.search;
+}
+
+const hasFilters = Boolean(tag || search);
+---
+
+<Base title="Blog" description="News, guides and stories from our team.">
+  <link
+    slot="head"
+    rel="alternate"
+    type="application/atom+xml"
+    title="Blog — Atom feed"
+    href="/blog/feed.xml"
+  />
+
+  <section class="od-section od-container">
+    <header class="blog-head">
+      <div>
+        <h1>Blog</h1>
+        <p class="blog-head__sub">News, guides and stories from our team.</p>
+      </div>
+      <form class="blog-search" method="get" action="/blog">
+        {tag && <input type="hidden" name="tag" value={tag} />}
+        <Input label="Search posts" name="search" type="search" value={search ?? ''} placeholder="Search…" />
+        <Button type="submit" variant="secondary">Search</Button>
+      </form>
+    </header>
+
+    {tags.length > 0 && (
+      <nav class="blog-tags" aria-label="Filter by tag">
+        <a href={filterUrl()}><Badge tone={tag ? 'neutral' : 'accent'}>All</Badge></a>
+        {tags.map((item) => (
+          <a href={filterUrl(item.slug)}>
+            <Badge tone={item.slug === tag ? 'accent' : 'neutral'}>{item.name}</Badge>
+          </a>
+        ))}
+      </nav>
+    )}
+
+    {posts.data.length === 0 ? (
+      <EmptyState
+        title="No posts found"
+        description={hasFilters
+          ? 'Try clearing the search or tag filter.'
+          : 'Check back soon — new posts are on the way.'}
+      >
+        {hasFilters && <Button href="/blog" variant="secondary">Clear filters</Button>}
+      </EmptyState>
+    ) : (
+      <div class="od-grid blog-grid">
+        {posts.data.map((post) => <PostCard post={post} />)}
+      </div>
+    )}
+
+    <Pagination meta={posts.meta} url={url} />
+  </section>
+</Base>
+
+<style>
+  .blog-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: var(--od-space-5);
+    flex-wrap: wrap;
+    margin-bottom: var(--od-space-5);
+  }
+  .blog-head__sub {
+    margin: 0;
+    color: var(--od-fg-muted);
+  }
+  .blog-search {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--od-space-2);
+    min-width: 280px;
+  }
+  .blog-search :global(.od-field) {
+    flex: 1;
+    margin-bottom: 0;
+  }
+  .blog-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--od-space-2);
+    margin-bottom: var(--od-space-6);
+  }
+  .blog-grid {
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  }
+</style>

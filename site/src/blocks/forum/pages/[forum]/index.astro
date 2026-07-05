@@ -1,0 +1,272 @@
+---
+// /forum/[forum] — question list with filters, sorting, tags and search.
+import Base from '@layouts/Base.astro';
+import Button from '@theme/Button.astro';
+import EmptyState from '@theme/EmptyState.astro';
+import Input from '@theme/Input.astro';
+import Pagination from '@components/Pagination.astro';
+import { apiFetch, OdusiteApiError, type ApiListResult } from '@lib/api/client';
+import PostRow from '../../components/PostRow.astro';
+import type { ForumFilter, ForumOrder, ForumPostListItem, ForumSummary, ForumTag } from '../../types';
+
+export const prerender = false;
+
+const slug = Astro.params.forum ?? '';
+const url = Astro.url;
+const lang = Astro.locals.lang?.split('_')[0] ?? 'en';
+
+const FILTERS: { value: ForumFilter; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'unanswered', label: 'Unanswered' },
+  { value: 'solved', label: 'Solved' },
+];
+const ORDERS: { value: ForumOrder; label: string }[] = [
+  { value: 'relevance', label: 'Relevance' },
+  { value: 'newest', label: 'Newest' },
+  { value: 'votes', label: 'Most voted' },
+  { value: 'activity', label: 'Recent activity' },
+];
+
+const filterParam = url.searchParams.get('filter');
+const filter: ForumFilter = FILTERS.some((f) => f.value === filterParam)
+  ? (filterParam as ForumFilter)
+  : 'all';
+const orderParam = url.searchParams.get('order');
+const order: ForumOrder = ORDERS.some((o) => o.value === orderParam)
+  ? (orderParam as ForumOrder)
+  : 'relevance';
+const tag = url.searchParams.get('tag') ?? undefined;
+const search = url.searchParams.get('search') ?? undefined;
+const page = Math.max(1, Number(url.searchParams.get('page') ?? '1') || 1);
+
+let forumFound: ForumSummary | undefined;
+let postsFound: ApiListResult<ForumPostListItem> | undefined;
+let tags: ForumTag[] = [];
+try {
+  const forums = await apiFetch<ForumSummary[]>(Astro, '/forum/forums', {
+    auth: false,
+    cart: false,
+  });
+  forumFound = forums.find((f) => f.slug === slug || String(f.id) === slug);
+  if (forumFound) {
+    [postsFound, tags] = await Promise.all([
+      apiFetch<ApiListResult<ForumPostListItem>>(Astro, '/forum/posts', {
+        auth: false,
+        cart: false,
+        query: {
+          forum: forumFound.id,
+          filter: filter === 'all' ? undefined : filter,
+          order,
+          tag,
+          search,
+          page,
+        },
+      }),
+      apiFetch<ForumTag[]>(Astro, '/forum/tags', {
+        auth: false,
+        cart: false,
+        query: { forum: forumFound.id },
+      }),
+    ]);
+  }
+} catch (error) {
+  if (error instanceof OdusiteApiError && error.status === 404) return Astro.rewrite('/404');
+  throw error;
+}
+if (!forumFound || !postsFound) return Astro.rewrite('/404');
+// Rebind to consts: narrowing on `let` does not reach template closures.
+const forum = forumFound;
+const posts = postsFound;
+
+/** Same URL with overridden query params; page resets on every change. */
+function withParams(overrides: Record<string, string | null>): string {
+  const next = new URL(url);
+  next.searchParams.delete('page');
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === null) next.searchParams.delete(key);
+    else next.searchParams.set(key, value);
+  }
+  return next.pathname + next.search;
+}
+
+Astro.response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=300');
+Astro.response.headers.set('X-Odusite-Tags', 'forum');
+---
+
+<Base title={`${forum.name} — Forum`} description={forum.description}>
+  <section class="od-section od-container">
+    <header class="forum-head">
+      <div>
+        <nav class="forum-head__crumbs" aria-label="Breadcrumb">
+          <a href="/forum">Forum</a> <span aria-hidden="true">/</span>
+        </nav>
+        <h1>{forum.name}</h1>
+        {forum.description && <p class="forum-head__desc">{forum.description}</p>}
+      </div>
+      <Button href={`/forum/ask?forum=${forum.id}`}>Ask a question</Button>
+    </header>
+
+    <div class="forum-toolbar">
+      <nav class="forum-filters" aria-label="Question filters">
+        {FILTERS.map((f) => (
+          <a
+            class:list={['forum-filters__item', { 'forum-filters__item--active': f.value === filter }]}
+            href={withParams({ filter: f.value === 'all' ? null : f.value })}
+            aria-current={f.value === filter ? 'true' : undefined}
+          >
+            {f.label}
+          </a>
+        ))}
+      </nav>
+
+      <form class="forum-search" method="get" action={url.pathname}>
+        {filter !== 'all' && <input type="hidden" name="filter" value={filter} />}
+        {tag && <input type="hidden" name="tag" value={tag} />}
+        <Input label="Search" name="search" type="search" value={search ?? ''} placeholder="Search questions…" />
+        <label class="forum-sort">
+          <span class="forum-sort__label">Sort by</span>
+          <select class="forum-sort__select" name="order">
+            {ORDERS.map((o) => (
+              <option value={o.value} selected={o.value === order}>{o.label}</option>
+            ))}
+          </select>
+        </label>
+        <Button type="submit" variant="secondary">Apply</Button>
+      </form>
+    </div>
+
+    {tags.length > 0 && (
+      <div class="forum-tags" aria-label="Filter by tag">
+        {tags.map((t) => (
+          <a
+            class:list={['forum-tags__chip', { 'forum-tags__chip--active': t.slug === tag }]}
+            href={t.slug === tag ? withParams({ tag: null }) : withParams({ tag: t.slug })}
+            aria-pressed={t.slug === tag ? 'true' : 'false'}
+          >
+            {t.name}
+            {typeof t.post_count === 'number' && <span class="forum-tags__count od-mono">{t.post_count}</span>}
+          </a>
+        ))}
+      </div>
+    )}
+
+    {posts.data.length === 0 ? (
+      <EmptyState
+        title="No questions found"
+        description={search || tag || filter !== 'all'
+          ? 'Try clearing the filters or searching for something else.'
+          : 'Be the first to start the conversation.'}
+      >
+        <Button href={`/forum/ask?forum=${forum.id}`}>Ask a question</Button>
+      </EmptyState>
+    ) : (
+      <div class="forum-list">
+        {posts.data.map((post) => <PostRow post={post} forumSlug={forum.slug} lang={lang} />)}
+      </div>
+    )}
+
+    <Pagination meta={posts.meta} url={url} />
+  </section>
+</Base>
+
+<style>
+  .forum-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: var(--od-space-4);
+    flex-wrap: wrap;
+    margin-bottom: var(--od-space-5);
+  }
+  .forum-head__crumbs {
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-subtle);
+    margin-bottom: var(--od-space-1);
+  }
+  .forum-head__desc { margin: 0; max-width: 70ch; }
+
+  .forum-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: var(--od-space-4);
+    flex-wrap: wrap;
+    margin-bottom: var(--od-space-4);
+  }
+  .forum-filters {
+    display: inline-flex;
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-m);
+    overflow: hidden;
+  }
+  .forum-filters__item {
+    padding: var(--od-space-2) var(--od-space-4);
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-muted);
+  }
+  .forum-filters__item + .forum-filters__item { border-left: 1px solid var(--od-border); }
+  .forum-filters__item:hover { background: var(--od-bg-hover); color: var(--od-fg); }
+  .forum-filters__item--active {
+    background: var(--od-accent-soft);
+    color: var(--od-accent);
+    font-weight: 600;
+  }
+
+  .forum-search {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--od-space-3);
+    flex-wrap: wrap;
+  }
+  .forum-search :global(.od-field) { margin-bottom: 0; }
+  .forum-sort {
+    display: flex;
+    flex-direction: column;
+    gap: var(--od-space-1);
+  }
+  .forum-sort__label {
+    font-size: var(--od-text-sm);
+    font-weight: 550;
+    color: var(--od-fg);
+  }
+  .forum-sort__select {
+    font: inherit;
+    font-size: var(--od-text-sm);
+    color: var(--od-fg);
+    background: var(--od-bg-inset);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-m);
+    padding: var(--od-space-2) var(--od-space-3);
+  }
+  .forum-sort__select:focus { border-color: var(--od-accent); outline: none; }
+
+  .forum-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--od-space-2);
+    margin-bottom: var(--od-space-4);
+  }
+  .forum-tags__chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--od-space-1);
+    padding: 2px var(--od-space-3);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-full);
+    font-size: var(--od-text-xs);
+    color: var(--od-fg-muted);
+  }
+  .forum-tags__chip:hover { border-color: var(--od-border-strong); color: var(--od-fg); }
+  .forum-tags__chip--active {
+    background: var(--od-accent-soft);
+    border-color: var(--od-accent);
+    color: var(--od-accent);
+  }
+  .forum-tags__count { color: var(--od-fg-subtle); }
+
+  .forum-list {
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-l);
+    background: var(--od-bg-raised);
+  }
+</style>

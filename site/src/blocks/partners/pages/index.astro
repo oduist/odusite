@@ -1,0 +1,342 @@
+---
+import Base from '@layouts/Base.astro';
+import Pagination from '@components/Pagination.astro';
+import Badge from '@theme/Badge.astro';
+import Button from '@theme/Button.astro';
+import Card from '@theme/Card.astro';
+import EmptyState from '@theme/EmptyState.astro';
+import { apiFetch, imgUrl } from '@lib/api/client';
+import type { ApiListResult } from '@lib/api/client';
+import { TAGS_HEADER } from '@lib/cache';
+import { facetEntries } from '../lib/facets';
+import type { PartnerKind, PartnerListItem } from '../types';
+
+export const prerender = false;
+
+const params = Astro.url.searchParams;
+const kind: PartnerKind = params.get('kind') === 'resellers' ? 'resellers' : 'customers';
+const search = params.get('search')?.trim() ?? '';
+const country = params.get('country') ?? '';
+const grade = params.get('grade') ?? '';
+const page = Math.max(1, Number.parseInt(params.get('page') ?? '1', 10) || 1);
+
+const { data: partners, meta } = await apiFetch<ApiListResult<PartnerListItem>>(
+  Astro,
+  '/partners',
+  {
+    auth: false,
+    cart: false,
+    query: {
+      kind,
+      page,
+      search: search || undefined,
+      country: country || undefined,
+      grade: grade || undefined,
+    },
+  },
+);
+
+// meta.facets: countries (+counts) and grades.
+const facetGroups = [
+  {
+    title: 'Country',
+    param: 'country',
+    entries: facetEntries(meta.facets, ['countries', 'country']),
+  },
+  {
+    title: 'Grade',
+    param: 'grade',
+    entries: facetEntries(meta.facets, ['grades', 'grade']),
+  },
+].filter((group) => group.entries.length > 0);
+
+/** Same URL with one filter changed (page reset). null removes the filter. */
+function filterUrl(param: string, value: string | null): string {
+  const next = new URL(Astro.url);
+  if (value === null) next.searchParams.delete(param);
+  else next.searchParams.set(param, value);
+  next.searchParams.delete('page');
+  return next.pathname + next.search;
+}
+
+function kindUrl(value: PartnerKind): string {
+  const next = new URL(Astro.url);
+  next.searchParams.set('kind', value);
+  next.searchParams.delete('page');
+  return next.pathname + next.search;
+}
+
+Astro.response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=600');
+Astro.response.headers.set(TAGS_HEADER, 'partners');
+---
+
+<Base title="Partners" description="Our customers and resellers around the world.">
+  <section class="od-section od-container">
+    <header class="partners-head">
+      <h1>Partners</h1>
+      <div class="partners-toggle" role="group" aria-label="Partner kind">
+        <a
+          class:list={['partners-toggle__link', { active: kind === 'customers' }]}
+          href={kindUrl('customers')}
+          aria-current={kind === 'customers' ? 'true' : undefined}
+        >
+          Customers
+        </a>
+        <a
+          class:list={['partners-toggle__link', { active: kind === 'resellers' }]}
+          href={kindUrl('resellers')}
+          aria-current={kind === 'resellers' ? 'true' : undefined}
+        >
+          Resellers
+        </a>
+      </div>
+    </header>
+
+    <div class="partners-layout">
+      <aside class="partners-side" aria-label="Partner filters">
+        <form class="partners-search" method="get" action="/partners" role="search">
+          <input type="hidden" name="kind" value={kind} />
+          <input
+            class="partners-search__input"
+            type="search"
+            name="search"
+            value={search}
+            placeholder="Search partners…"
+            aria-label="Search partners"
+          />
+          {country && <input type="hidden" name="country" value={country} />}
+          {grade && <input type="hidden" name="grade" value={grade} />}
+          <Button type="submit" variant="secondary" size="sm">Search</Button>
+        </form>
+
+        {facetGroups.map((group) => {
+          const current = params.get(group.param) ?? '';
+          return (
+            <nav class="partners-facet" aria-label={`Filter by ${group.title.toLowerCase()}`}>
+              <h2 class="partners-facet__title">{group.title}</h2>
+              <ul class="partners-facet__list">
+                <li>
+                  <a
+                    class:list={['partners-facet__link', { active: !current }]}
+                    href={filterUrl(group.param, null)}
+                    aria-current={!current ? 'true' : undefined}
+                  >
+                    All
+                  </a>
+                </li>
+                {group.entries.map((entry) => {
+                  const active = current === entry.value;
+                  return (
+                    <li>
+                      <a
+                        class:list={['partners-facet__link', { active }]}
+                        href={filterUrl(group.param, active ? null : entry.value)}
+                        aria-current={active ? 'true' : undefined}
+                      >
+                        <span class="partners-facet__label">{entry.label}</span>
+                        {entry.count !== null && (
+                          <span class="partners-facet__count">{entry.count}</span>
+                        )}
+                      </a>
+                    </li>
+                  );
+                })}
+              </ul>
+            </nav>
+          );
+        })}
+      </aside>
+
+      <div class="partners-main">
+        {partners.length === 0 ? (
+          <EmptyState
+            title="No partners found"
+            description="Try removing some filters or switching between customers and resellers."
+          >
+            <Button href="/partners" variant="secondary">Clear filters</Button>
+          </EmptyState>
+        ) : (
+          <ul class="partners-grid">
+            {partners.map((partner) => {
+              const logo = imgUrl(partner.logo);
+              const location = [partner.city, partner.country].filter(Boolean).join(', ');
+              return (
+                <li>
+                  <Card href={`/partners/${partner.slug}`} padded={true}>
+                    <div class="partner-card">
+                      <div class="partner-card__logo">
+                        {logo ? (
+                          <img src={logo} alt="" loading="lazy" width="160" height="80" />
+                        ) : (
+                          <span class="partner-card__initial" aria-hidden="true">
+                            {partner.name.charAt(0)}
+                          </span>
+                        )}
+                      </div>
+                      <h3 class="partner-card__name">{partner.name}</h3>
+                      {location && <p class="partner-card__location">{location}</p>}
+                      {partner.grade && <Badge tone="accent">{partner.grade}</Badge>}
+                    </div>
+                  </Card>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        <Pagination meta={meta} url={Astro.url} />
+      </div>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .partners-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--od-space-4);
+    flex-wrap: wrap;
+    margin-bottom: var(--od-space-5);
+  }
+  .partners-head h1 { margin: 0; }
+
+  .partners-toggle {
+    display: inline-flex;
+    border: 1px solid var(--od-border-strong);
+    border-radius: var(--od-radius-m);
+    overflow: hidden;
+  }
+  .partners-toggle__link {
+    padding: var(--od-space-2) var(--od-space-4);
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-muted);
+  }
+  .partners-toggle__link:hover { background: var(--od-bg-hover); color: var(--od-fg); }
+  .partners-toggle__link.active {
+    background: var(--od-accent);
+    color: var(--od-accent-fg);
+    font-weight: 600;
+  }
+
+  .partners-layout {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    gap: var(--od-space-7);
+    align-items: start;
+  }
+  @media (max-width: 800px) {
+    .partners-layout { grid-template-columns: 1fr; }
+  }
+
+  .partners-search {
+    display: flex;
+    gap: var(--od-space-2);
+    margin-bottom: var(--od-space-5);
+  }
+  .partners-search__input {
+    flex: 1;
+    min-width: 0;
+    font: inherit;
+    font-size: var(--od-text-sm);
+    color: var(--od-fg);
+    background: var(--od-bg-inset);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-m);
+    padding: var(--od-space-2) var(--od-space-3);
+    transition: border-color var(--od-dur-fast) var(--od-ease);
+  }
+  .partners-search__input::placeholder { color: var(--od-fg-subtle); }
+  .partners-search__input:focus { border-color: var(--od-accent); outline: none; }
+
+  .partners-facet { margin-bottom: var(--od-space-5); }
+  .partners-facet__title {
+    font-size: var(--od-text-xs);
+    font-weight: 600;
+    letter-spacing: var(--od-tracking-wide);
+    text-transform: uppercase;
+    color: var(--od-fg-subtle);
+    margin-bottom: var(--od-space-2);
+  }
+  .partners-facet__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .partners-facet__link {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--od-space-2);
+    padding: var(--od-space-1) var(--od-space-3);
+    border-radius: var(--od-radius-s);
+    color: var(--od-fg-muted);
+    font-size: var(--od-text-sm);
+  }
+  .partners-facet__link:hover { background: var(--od-bg-hover); color: var(--od-fg); }
+  .partners-facet__link.active {
+    background: var(--od-accent-soft);
+    color: var(--od-accent);
+    font-weight: 550;
+  }
+  .partners-facet__label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .partners-facet__count {
+    font-size: var(--od-text-xs);
+    color: var(--od-fg-subtle);
+  }
+  .partners-facet__link.active .partners-facet__count { color: inherit; }
+
+  .partners-grid {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: var(--od-space-4);
+  }
+  .partner-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: var(--od-space-2);
+  }
+  .partner-card__logo {
+    height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .partner-card__logo img {
+    max-height: 100%;
+    width: auto;
+    object-fit: contain;
+  }
+  .partner-card__initial {
+    width: 56px;
+    height: 56px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--od-radius-full);
+    background: var(--od-accent-soft);
+    color: var(--od-accent);
+    font-size: var(--od-text-xl);
+    font-weight: 650;
+  }
+  .partner-card__name {
+    margin: 0;
+    font-size: var(--od-text-base);
+  }
+  .partner-card__location {
+    margin: 0;
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-subtle);
+  }
+</style>

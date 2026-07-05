@@ -1,0 +1,48 @@
+---
+// Centered narrow card used by the public auth pages (login/signup/reset).
+import Base from '@layouts/Base.astro';
+
+interface Props {
+  title: string;
+  heading: string;
+  subtitle?: string;
+}
+const { title, heading, subtitle } = Astro.props;
+---
+
+<Base title={title} noindex>
+  <div class="auth od-container">
+    <div class="auth__card">
+      <h1 class="auth__heading">{heading}</h1>
+      {subtitle && <p class="auth__subtitle">{subtitle}</p>}
+      <slot />
+    </div>
+  </div>
+</Base>
+
+<style>
+  .auth {
+    display: flex;
+    justify-content: center;
+    padding-block: var(--od-space-9);
+    flex: 1;
+  }
+  .auth__card {
+    width: 100%;
+    max-width: 400px;
+    background: var(--od-bg-raised);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-l);
+    padding: var(--od-space-6);
+    height: fit-content;
+  }
+  .auth__heading {
+    font-size: var(--od-text-xl);
+    margin-bottom: var(--od-space-2);
+  }
+  .auth__subtitle {
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-subtle);
+    margin-bottom: var(--od-space-5);
+  }
+</style>

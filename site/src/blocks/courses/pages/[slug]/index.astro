@@ -1,0 +1,320 @@
+---
+// /courses/[slug] — course page: hero, stats, curriculum accordion, join CTA.
+import Base from '@layouts/Base.astro';
+import Badge from '@theme/Badge.astro';
+import Button from '@theme/Button.astro';
+import Hero from '@theme/Hero.astro';
+import EmptyState from '@theme/EmptyState.astro';
+import { apiFetch, imgUrl, OdusiteApiError } from '@lib/api/client';
+import { flattenCurriculum, formatDuration, ratingStars, rewriteHtml, SLIDE_ICONS } from '../../lib';
+import type { CourseDetail } from '../../types';
+
+export const prerender = false;
+
+const slug = Astro.params.slug ?? '';
+const user = Astro.locals.user;
+
+let course: CourseDetail;
+try {
+  course = await apiFetch<CourseDetail>(Astro, `/courses/${slug}`, { cart: false });
+} catch (error) {
+  if (error instanceof OdusiteApiError && error.status === 404) return Astro.rewrite('/404');
+  throw error;
+}
+// Canonical URL by slug (detail endpoint accepts id or slug).
+if (course.slug !== slug && String(course.id) !== slug) {
+  return Astro.redirect(`/courses/${course.slug}`, 301);
+}
+
+const lessonCount = flattenCurriculum(course.curriculum).length || course.slide_count;
+const completion = Math.min(100, Math.max(0, Math.round(course.completion ?? 0)));
+const duration = formatDuration(course.total_time);
+const nextParam = encodeURIComponent(`/courses/${course.slug}`);
+
+Astro.response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=300');
+Astro.response.headers.set('X-Odusite-Tags', `courses,courses:${course.id}`);
+---
+
+<Base
+  title={course.seo?.title ?? `${course.name} — Courses`}
+  description={course.seo?.description ?? course.description_short}
+  ogImage={course.seo?.og_image ?? imgUrl(course.cover)}
+>
+  <Hero title={course.name} subtitle={course.description_short} image={imgUrl(course.cover)}>
+    <div class="course-cta">
+      {course.is_member ? (
+        <div class="course-progress-wrap">
+          <div
+            class="course-progress"
+            role="progressbar"
+            aria-valuenow={completion}
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-label="Course progress"
+          >
+            <div class="course-progress__bar" style={`width: ${completion}%`}></div>
+          </div>
+          <span class="course-progress__label">{completion}% complete</span>
+        </div>
+      ) : course.enroll === 'public' ? (
+        user ? (
+          <div data-join-box data-course-id={course.id}>
+            <Button class="course-join" size="lg">Join this course</Button>
+          </div>
+        ) : (
+          <Button href={`/login?next=${nextParam}`} size="lg">Sign in to join</Button>
+        )
+      ) : course.enroll === 'invite' ? (
+        <Badge tone="warning">On invitation only</Badge>
+      ) : (
+        <Badge tone="info">Paid course — coming soon</Badge>
+      )}
+    </div>
+  </Hero>
+
+  <section class="od-section od-container">
+    <div class="course-stats">
+      {duration && (
+        <div class="course-stat">
+          <span class="course-stat__value od-mono">{duration}</span>
+          <span class="course-stat__label">Duration</span>
+        </div>
+      )}
+      <div class="course-stat">
+        <span class="course-stat__value od-mono">{lessonCount}</span>
+        <span class="course-stat__label">Lessons</span>
+      </div>
+      <div class="course-stat">
+        <span class="course-stat__value od-mono">{course.members_count}</span>
+        <span class="course-stat__label">Members</span>
+      </div>
+      {course.rating_avg > 0 && (
+        <div class="course-stat">
+          <span class="course-stat__value course-stat__stars" title={`Rated ${course.rating_avg.toFixed(1)} out of 5`}>
+            {ratingStars(course.rating_avg)}
+          </span>
+          <span class="course-stat__label">Rating</span>
+        </div>
+      )}
+    </div>
+
+    {course.description_html && (
+      <div class="course-desc" set:html={rewriteHtml(course.description_html)} />
+    )}
+
+    {course.prerequisites && course.prerequisites.length > 0 && (
+      <div class="course-prereq">
+        <h2>Prerequisites</h2>
+        <ul>
+          {course.prerequisites.map((prereq) => (
+            <li><a href={`/courses/${prereq.slug}`}>{prereq.name}</a></li>
+          ))}
+        </ul>
+      </div>
+    )}
+
+    <h2>Course content</h2>
+    {course.curriculum.length === 0 ? (
+      <EmptyState title="No content yet" description="Lessons for this course are being prepared." />
+    ) : (
+      <div class="curriculum">
+        {course.curriculum.map((section) => (
+          <details class="curriculum__section" open>
+            <summary class="curriculum__summary">
+              <span class="curriculum__category">{section.category ?? 'Content'}</span>
+              <span class="curriculum__count">
+                {section.slides.length} lesson{section.slides.length === 1 ? '' : 's'}
+              </span>
+            </summary>
+            <div class="curriculum__rows">
+              {section.slides.map((slide) =>
+                slide.is_locked ? (
+                  <div class="slide-row slide-row--locked">
+                    <span class="slide-row__icon" aria-hidden="true">{SLIDE_ICONS[slide.type] ?? '📄'}</span>
+                    <span class="slide-row__name">{slide.name}</span>
+                    {slide.duration > 0 && (
+                      <span class="slide-row__duration od-mono">{formatDuration(slide.duration)}</span>
+                    )}
+                    <span class="slide-row__lock" title="Members only" aria-label="Locked">🔒</span>
+                  </div>
+                ) : (
+                  <a class="slide-row" href={`/courses/${course.slug}/${slide.slug}`}>
+                    <span class="slide-row__icon" aria-hidden="true">{SLIDE_ICONS[slide.type] ?? '📄'}</span>
+                    <span class="slide-row__name">{slide.name}</span>
+                    {slide.is_preview && !course.is_member && <Badge tone="info">Preview</Badge>}
+                    {slide.duration > 0 && (
+                      <span class="slide-row__duration od-mono">{formatDuration(slide.duration)}</span>
+                    )}
+                    {slide.completed && <span class="slide-row__done" title="Completed">✓</span>}
+                  </a>
+                ),
+              )}
+            </div>
+          </details>
+        ))}
+      </div>
+    )}
+  </section>
+</Base>
+
+<script>
+  type ApiError = { code?: string; message?: string; details?: Record<string, unknown> };
+
+  const box = document.querySelector<HTMLElement>('[data-join-box]');
+  const joinButton = box?.querySelector<HTMLButtonElement>('.course-join');
+  joinButton?.addEventListener('click', async () => {
+    const courseId = Number(box?.dataset.courseId);
+    if (!courseId) return;
+    joinButton.disabled = true;
+    const response = await fetch('/api/courses/join', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ course_id: courseId }),
+    });
+    if (response.ok) {
+      window.location.reload();
+      return;
+    }
+    joinButton.disabled = false;
+    const payload = (await response.json().catch(() => ({}))) as { error?: ApiError };
+    if (payload.error?.code === 'login_required') {
+      window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
+      return;
+    }
+    window.alert(payload.error?.message ?? 'Could not join the course. Please try again.');
+  });
+</script>
+
+<style>
+  .course-cta {
+    display: flex;
+    align-items: center;
+    gap: var(--od-space-4);
+  }
+  .course-progress-wrap {
+    display: flex;
+    align-items: center;
+    gap: var(--od-space-3);
+    min-width: min(360px, 100%);
+  }
+  .course-progress {
+    flex: 1;
+    height: 8px;
+    background: var(--od-bg-inset);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-full);
+    overflow: hidden;
+  }
+  .course-progress__bar {
+    height: 100%;
+    background: var(--od-accent);
+    border-radius: var(--od-radius-full);
+    transition: width var(--od-dur-slow) var(--od-ease);
+  }
+  .course-progress__label {
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-muted);
+    white-space: nowrap;
+  }
+
+  .course-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--od-space-6);
+    padding: var(--od-space-4) var(--od-space-5);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-l);
+    background: var(--od-bg-raised);
+    margin-bottom: var(--od-space-6);
+  }
+  .course-stat {
+    display: flex;
+    flex-direction: column;
+    gap: var(--od-space-1);
+  }
+  .course-stat__value {
+    font-size: var(--od-text-lg);
+    font-weight: 600;
+    color: var(--od-fg);
+  }
+  .course-stat__stars { color: var(--od-warning); letter-spacing: 2px; }
+  .course-stat__label {
+    font-size: var(--od-text-xs);
+    letter-spacing: var(--od-tracking-wide);
+    text-transform: uppercase;
+    color: var(--od-fg-subtle);
+  }
+
+  .course-desc {
+    max-width: 80ch;
+    margin-bottom: var(--od-space-6);
+    color: var(--od-fg-muted);
+  }
+  .course-desc :global(img) { border-radius: var(--od-radius-m); }
+
+  .course-prereq { margin-bottom: var(--od-space-6); }
+  .course-prereq ul { margin: 0; padding-left: var(--od-space-5); color: var(--od-fg-muted); }
+
+  .curriculum {
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-l);
+    background: var(--od-bg-raised);
+    overflow: hidden;
+  }
+  .curriculum__section + .curriculum__section { border-top: 1px solid var(--od-border); }
+  .curriculum__summary {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--od-space-3);
+    padding: var(--od-space-4) var(--od-space-5);
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--od-fg);
+    list-style: none;
+  }
+  .curriculum__summary::before {
+    content: '▸';
+    color: var(--od-fg-subtle);
+    margin-right: var(--od-space-2);
+    transition: transform var(--od-dur-fast) var(--od-ease);
+  }
+  .curriculum__section[open] > .curriculum__summary::before { transform: rotate(90deg); }
+  .curriculum__summary::-webkit-details-marker { display: none; }
+  .curriculum__category { flex: 1; }
+  .curriculum__count {
+    font-size: var(--od-text-xs);
+    color: var(--od-fg-subtle);
+    font-weight: 400;
+  }
+  .curriculum__rows { border-top: 1px solid var(--od-border); }
+
+  .slide-row {
+    display: flex;
+    align-items: center;
+    gap: var(--od-space-3);
+    padding: var(--od-space-3) var(--od-space-5);
+    color: var(--od-fg);
+    border-bottom: 1px solid var(--od-border);
+  }
+  .slide-row:last-child { border-bottom: none; }
+  a.slide-row:hover { background: var(--od-bg-hover); color: var(--od-fg); }
+  .slide-row--locked {
+    color: var(--od-fg-subtle);
+    background: var(--od-bg-inset);
+  }
+  .slide-row__icon { flex: none; }
+  .slide-row__name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .slide-row__duration {
+    font-size: var(--od-text-xs);
+    color: var(--od-fg-subtle);
+  }
+  .slide-row__done { color: var(--od-success); font-weight: 600; }
+  .slide-row__lock { flex: none; }
+</style>

@@ -1,0 +1,16 @@
+{
+  "extends": "astro/tsconfigs/strict",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@lib/*": ["src/lib/*"],
+      "@components/*": ["src/components/*"],
+      "@layouts/*": ["src/layouts/*"],
+      // Type-level mirror of the Vite @theme fallback (theme override first,
+      // then the core themeable component). Vite resolves at build time.
+      "@theme/*": ["src/themes/default/components/*", "src/components/themeable/*"]
+    }
+  },
+  "include": [".astro/types.d.ts", "src/**/*", "integrations/**/*"],
+  "exclude": ["dist"]
+}

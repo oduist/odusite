@@ -1,0 +1,74 @@
+---
+// Portal projects: GET /my/projects (specs/modules/odusite_project.md).
+import Button from '@theme/Button.astro';
+import Card from '@theme/Card.astro';
+import EmptyState from '@theme/EmptyState.astro';
+import Pagination from '@components/Pagination.astro';
+import PortalLayout from '../../components/PortalLayout.astro';
+import { loginRedirect, portalApi } from '../../lib';
+import type { ApiListResult } from '@lib/api/client';
+import type { ProjectListItem } from '../../types';
+
+export const prerender = false;
+if (!Astro.locals.user) return loginRedirect(Astro);
+
+const page = Number(Astro.url.searchParams.get('page') ?? '1') || 1;
+const result = await portalApi<ApiListResult<ProjectListItem>>(Astro, '/my/projects', {
+  query: { page },
+});
+if (result instanceof Response) return result;
+---
+
+<PortalLayout title="Projects" active="projects">
+  <header class="proj__head">
+    <h1>Projects</h1>
+    <Button href="/portal/tasks" variant="secondary" size="sm">All tasks</Button>
+  </header>
+
+  {result.data.length === 0 ? (
+    <EmptyState title="No projects" description="Projects shared with you will appear here." />
+  ) : (
+    <div class="proj__grid">
+      {result.data.map((project) => (
+        <Card href={`/portal/tasks?project=${project.id}`} class="proj__card">
+          <span class="proj__name">{project.name}</span>
+          <span class="proj__counts">
+            <strong class="od-mono">{project.open_task_count}</strong> open ·{' '}
+            <span class="od-mono">{project.task_count}</span> total tasks
+          </span>
+        </Card>
+      ))}
+    </div>
+  )}
+  <Pagination meta={result.meta} url={Astro.url} />
+</PortalLayout>
+
+<style>
+  .proj__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--od-space-3);
+    margin-bottom: var(--od-space-5);
+  }
+  .proj__head h1 { margin: 0; }
+  .proj__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: var(--od-space-4);
+  }
+  .proj__grid :global(.proj__card) {
+    display: flex;
+    flex-direction: column;
+    gap: var(--od-space-2);
+  }
+  .proj__name {
+    font-weight: 600;
+    color: var(--od-fg);
+  }
+  .proj__counts {
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-subtle);
+  }
+  .proj__counts strong { color: var(--od-accent); }
+</style>

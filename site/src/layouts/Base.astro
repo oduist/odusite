@@ -1,0 +1,33 @@
+---
+import 'virtual:odusite/theme.css';
+import Header from '@components/Header.astro';
+import Footer from '@components/Footer.astro';
+import SEO from '@components/SEO.astro';
+
+interface Props {
+  title: string;
+  description?: string;
+  ogImage?: string | null;
+  ogType?: string;
+  noindex?: boolean;
+}
+const props = Astro.props;
+---
+
+<!doctype html>
+<html lang={Astro.locals.lang?.split('_')[0] ?? 'en'} data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="generator" content={Astro.generator} />
+    <SEO {...props} />
+    <slot name="head" />
+  </head>
+  <body>
+    <Header />
+    <main>
+      <slot />
+    </main>
+    <Footer />
+  </body>
+</html>

@@ -1,0 +1,60 @@
+---
+// /forum — list of forums.
+import Base from '@layouts/Base.astro';
+import Card from '@theme/Card.astro';
+import EmptyState from '@theme/EmptyState.astro';
+import { apiFetch } from '@lib/api/client';
+import type { ForumSummary } from '../types';
+
+export const prerender = false;
+
+const forums = await apiFetch<ForumSummary[]>(Astro, '/forum/forums', {
+  auth: false,
+  cart: false,
+});
+
+Astro.response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=300');
+Astro.response.headers.set('X-Odusite-Tags', 'forum');
+---
+
+<Base title="Forum" description="Community questions and answers.">
+  <section class="od-section od-container">
+    <header class="forum-head">
+      <h1>Forum</h1>
+      <p>Ask questions, share answers, earn karma.</p>
+    </header>
+
+    {forums.length === 0 ? (
+      <EmptyState
+        title="No forums yet"
+        description="The community space is being prepared — check back soon."
+      />
+    ) : (
+      <div class="od-grid forum-grid">
+        {forums.map((forum) => (
+          <Card href={`/forum/${forum.slug}`}>
+            <h3 class="forum-card__name">{forum.name}</h3>
+            {forum.description && <p class="forum-card__desc">{forum.description}</p>}
+            <p class="forum-card__count">
+              <span class="od-mono">{forum.post_count}</span>
+              {forum.mode === 'discussions' ? ' discussions' : ' questions'}
+            </p>
+          </Card>
+        ))}
+      </div>
+    )}
+  </section>
+</Base>
+
+<style>
+  .forum-head { margin-bottom: var(--od-space-6); }
+  .forum-head p { margin: 0; }
+  .forum-grid { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+  .forum-card__name { margin-bottom: var(--od-space-2); }
+  .forum-card__desc { color: var(--od-fg-muted); }
+  .forum-card__count {
+    margin: 0;
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-subtle);
+  }
+</style>

@@ -1,0 +1,64 @@
+---
+// Recursive category tree for the catalog sidebar.
+import type { ShopCategory } from '../types';
+
+interface Props {
+  categories: ShopCategory[];
+  activeId?: number | undefined;
+}
+const { categories, activeId } = Astro.props;
+---
+
+<ul class="cat-tree">
+  {categories.map((category) => (
+    <li>
+      <a
+        class:list={['cat-tree__link', { active: category.id === activeId }]}
+        href={`/shop/category/${category.slug}`}
+      >
+        <span>{category.name}</span>
+        {category.product_count > 0 && (
+          <span class="cat-tree__count">{category.product_count}</span>
+        )}
+      </a>
+      {category.children.length > 0 && (
+        <Astro.self categories={category.children} activeId={activeId} />
+      )}
+    </li>
+  ))}
+</ul>
+
+<style>
+  .cat-tree {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .cat-tree .cat-tree {
+    padding-left: var(--od-space-4);
+    border-left: 1px solid var(--od-border);
+    margin-left: var(--od-space-2);
+  }
+  .cat-tree__link {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--od-space-2);
+    padding: var(--od-space-1) var(--od-space-2);
+    border-radius: var(--od-radius-s);
+    color: var(--od-fg-muted);
+    font-size: var(--od-text-sm);
+  }
+  .cat-tree__link:hover {
+    background: var(--od-bg-hover);
+    color: var(--od-fg);
+  }
+  .cat-tree__link.active {
+    color: var(--od-accent);
+    background: var(--od-accent-soft);
+  }
+  .cat-tree__count {
+    font-size: var(--od-text-xs);
+    color: var(--od-fg-subtle);
+  }
+</style>

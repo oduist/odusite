@@ -1,0 +1,185 @@
+---
+import Base from '@layouts/Base.astro';
+import Badge from '@theme/Badge.astro';
+import Hero from '@theme/Hero.astro';
+import { apiFetch, imgUrl, OdusiteApiError } from '@lib/api/client';
+import PostCard from '../components/PostCard.astro';
+import { formatDate, rewriteImageUrls } from '../lib/utils';
+import type { BlogPostDetail } from '../types';
+
+export const prerender = false;
+
+const slug = Astro.params.slug ?? '';
+let post: BlogPostDetail;
+try {
+  post = await apiFetch<BlogPostDetail>(Astro, `/blog/posts/${slug}`, {
+    auth: false,
+    cart: false,
+  });
+} catch (error) {
+  if (error instanceof OdusiteApiError && error.status === 404) {
+    return Astro.rewrite('/404');
+  }
+  throw error;
+}
+
+Astro.response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=600');
+Astro.response.headers.set('X-Odusite-Tags', `blog,blog:${post.id}`);
+
+const content = rewriteImageUrls(post.content);
+const avatar = imgUrl(post.author?.avatar);
+const related = post.related ?? [];
+---
+
+<Base
+  title={post.seo?.title || post.name}
+  description={post.seo?.description || post.teaser || post.subtitle || undefined}
+  ogImage={post.seo?.og_image || post.cover}
+  ogType="article"
+>
+  <Hero title={post.name} subtitle={post.subtitle ?? undefined} image={imgUrl(post.cover)}>
+    <div class="post-meta">
+      {avatar && <img class="post-meta__avatar" src={avatar} alt="" width="28" height="28" />}
+      <span class="post-meta__author">{post.author.name}</span>
+      <span aria-hidden="true">·</span>
+      <time datetime={post.post_date}>{formatDate(post.post_date)}</time>
+      {post.tags.map((tag) => (
+        <a href={`/blog?tag=${tag.slug}`}><Badge tone="accent">{tag.name}</Badge></a>
+      ))}
+    </div>
+  </Hero>
+
+  <article class="od-section od-container">
+    <div class="post-content" set:html={content} />
+
+    {(post.prev || post.next) && (
+      <nav class="post-nav" aria-label="More posts">
+        {post.prev ? (
+          <a class="post-nav__link" rel="prev" href={`/blog/${post.prev.slug}`}>
+            <span>← Previous</span>
+            <strong>{post.prev.name}</strong>
+          </a>
+        ) : (
+          <span></span>
+        )}
+        {post.next ? (
+          <a class="post-nav__link post-nav__link--next" rel="next" href={`/blog/${post.next.slug}`}>
+            <span>Next →</span>
+            <strong>{post.next.name}</strong>
+          </a>
+        ) : (
+          <span></span>
+        )}
+      </nav>
+    )}
+  </article>
+
+  {related.length > 0 && (
+    <section class="od-section od-container post-related">
+      <h2>Related posts</h2>
+      <div class="od-grid post-related__grid">
+        {related.map((item) => <PostCard post={item} />)}
+      </div>
+    </section>
+  )}
+</Base>
+
+<style>
+  .post-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--od-space-2);
+    color: var(--od-fg-muted);
+    font-size: var(--od-text-sm);
+  }
+  .post-meta__avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: var(--od-radius-full);
+    object-fit: cover;
+  }
+  .post-meta__author {
+    color: var(--od-fg);
+    font-weight: 550;
+  }
+
+  .post-content {
+    max-width: 72ch;
+    margin-inline: auto;
+  }
+  .post-content :global(h2),
+  .post-content :global(h3) {
+    margin-top: var(--od-space-6);
+  }
+  .post-content :global(img) {
+    border-radius: var(--od-radius-m);
+    margin-block: var(--od-space-5);
+  }
+  .post-content :global(figure) {
+    margin: var(--od-space-5) 0;
+  }
+  .post-content :global(blockquote) {
+    margin: var(--od-space-5) 0;
+    padding: var(--od-space-1) var(--od-space-5);
+    border-left: 3px solid var(--od-accent);
+    color: var(--od-fg-muted);
+  }
+  .post-content :global(pre) {
+    background: var(--od-bg-inset);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-m);
+    padding: var(--od-space-4);
+    overflow-x: auto;
+  }
+  .post-content :global(table) {
+    border-collapse: collapse;
+    width: 100%;
+    margin-block: var(--od-space-5);
+  }
+  .post-content :global(th),
+  .post-content :global(td) {
+    border: 1px solid var(--od-border);
+    padding: var(--od-space-2) var(--od-space-3);
+  }
+
+  .post-nav {
+    max-width: 72ch;
+    margin: var(--od-space-7) auto 0;
+    padding-top: var(--od-space-5);
+    border-top: 1px solid var(--od-border);
+    display: flex;
+    justify-content: space-between;
+    gap: var(--od-space-5);
+  }
+  .post-nav__link {
+    display: flex;
+    flex-direction: column;
+    gap: var(--od-space-1);
+    max-width: 45%;
+  }
+  .post-nav__link span {
+    font-size: var(--od-text-xs);
+    text-transform: uppercase;
+    letter-spacing: var(--od-tracking-wide);
+    color: var(--od-fg-subtle);
+  }
+  .post-nav__link strong {
+    color: var(--od-fg);
+    font-weight: 600;
+  }
+  .post-nav__link:hover strong {
+    color: var(--od-accent);
+  }
+  .post-nav__link--next {
+    text-align: right;
+    margin-left: auto;
+  }
+
+  .post-related h2 {
+    margin-bottom: var(--od-space-5);
+  }
+  .post-related__grid {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  }
+</style>

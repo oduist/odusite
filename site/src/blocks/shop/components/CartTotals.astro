@@ -1,0 +1,90 @@
+---
+// Totals block, aware of the website tax mode (included/excluded).
+import { formatMoney } from '../lib';
+import type { CartAmounts, TaxMode } from '../types';
+
+interface Props {
+  amounts: CartAmounts;
+  taxMode: TaxMode;
+  lang: string;
+}
+const { amounts, taxMode, lang } = Astro.props;
+const fmt = (value: number) => formatMoney(value, amounts.currency, lang);
+---
+
+<dl class="totals">
+  {taxMode === 'excluded' ? (
+    <>
+      <div class="totals__row">
+        <dt>Subtotal</dt>
+        <dd class="od-mono">{fmt(amounts.untaxed)}</dd>
+      </div>
+      {amounts.delivery > 0 && (
+        <div class="totals__row">
+          <dt>Delivery</dt>
+          <dd class="od-mono">{fmt(amounts.delivery)}</dd>
+        </div>
+      )}
+      <div class="totals__row">
+        <dt>Taxes</dt>
+        <dd class="od-mono">{fmt(amounts.tax)}</dd>
+      </div>
+    </>
+  ) : (
+    <>
+      {amounts.delivery > 0 && (
+        <div class="totals__row">
+          <dt>Delivery</dt>
+          <dd class="od-mono">{fmt(amounts.delivery)}</dd>
+        </div>
+      )}
+      <div class="totals__row totals__row--muted">
+        <dt>Included taxes</dt>
+        <dd class="od-mono">{fmt(amounts.tax)}</dd>
+      </div>
+    </>
+  )}
+  <div class="totals__row totals__row--grand">
+    <dt>Total</dt>
+    <dd class="od-mono">{fmt(amounts.total)}</dd>
+  </div>
+</dl>
+
+<style>
+  .totals {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--od-space-2);
+  }
+  .totals__row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--od-space-3);
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-muted);
+  }
+  .totals__row dt {
+    margin: 0;
+  }
+  .totals__row dd {
+    margin: 0;
+    color: var(--od-fg);
+  }
+  .totals__row--muted,
+  .totals__row--muted dd {
+    color: var(--od-fg-subtle);
+  }
+  .totals__row--grand {
+    border-top: 1px solid var(--od-border);
+    padding-top: var(--od-space-3);
+    margin-top: var(--od-space-2);
+    font-size: var(--od-text-base);
+    font-weight: 650;
+    color: var(--od-fg);
+  }
+  .totals__row--grand dd {
+    font-size: var(--od-text-lg);
+  }
+</style>

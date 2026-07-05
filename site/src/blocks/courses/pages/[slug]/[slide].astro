@@ -1,0 +1,494 @@
+---
+// /courses/[slug]/[slide] — content viewer: video / article / document /
+// infographic / quiz, prev-next navigation, completion toggle.
+import Base from '@layouts/Base.astro';
+import Button from '@theme/Button.astro';
+import EmptyState from '@theme/EmptyState.astro';
+import { apiFetch, OdusiteApiError } from '@lib/api/client';
+import { flattenCurriculum, formatDuration, rewriteHtml, SLIDE_ICONS } from '../../lib';
+import type { CourseDetail, SlideContent } from '../../types';
+
+export const prerender = false;
+
+const slug = Astro.params.slug ?? '';
+const slideParam = Astro.params.slide ?? '';
+const user = Astro.locals.user;
+
+let course: CourseDetail;
+try {
+  course = await apiFetch<CourseDetail>(Astro, `/courses/${slug}`, { cart: false });
+} catch (error) {
+  if (error instanceof OdusiteApiError && error.status === 404) return Astro.rewrite('/404');
+  throw error;
+}
+
+const flat = flattenCurriculum(course.curriculum);
+const index = flat.findIndex((s) => s.slug === slideParam || String(s.id) === slideParam);
+if (index === -1) return Astro.rewrite('/404');
+const slide = flat[index];
+if (!slide) return Astro.rewrite('/404');
+const prev = index > 0 ? flat[index - 1] : undefined;
+const next = index < flat.length - 1 ? flat[index + 1] : undefined;
+
+let contentFetched: SlideContent | null = null;
+let locked = false;
+try {
+  contentFetched = await apiFetch<SlideContent>(
+    Astro,
+    `/courses/${course.id}/slides/${slide.id}`,
+    { cart: false },
+  );
+} catch (error) {
+  if (error instanceof OdusiteApiError) {
+    if (error.status === 404) return Astro.rewrite('/404');
+    if (error.status === 401 || error.status === 403) locked = true;
+    else throw error;
+  } else {
+    throw error;
+  }
+}
+// Rebind to a const: narrowing on `let` does not reach template closures.
+const content = contentFetched;
+
+const binaryProxy = `/api/courses/binary/${course.id}/${slide.id}`;
+const nextParam = encodeURIComponent(Astro.url.pathname);
+const showComplete = !!user && !!course.is_member && !locked && slide.type !== 'quiz';
+
+Astro.response.headers.set('Cache-Control', 'public, max-age=0, s-maxage=300');
+Astro.response.headers.set('X-Odusite-Tags', `courses,courses:${course.id}`);
+---
+
+<Base title={`${slide.name} — ${course.name}`} description={course.description_short} noindex={locked}>
+  <section class="od-section od-container viewer">
+    <nav class="viewer__crumbs" aria-label="Breadcrumb">
+      <a href="/courses">Courses</a> <span aria-hidden="true">/</span>
+      <a href={`/courses/${course.slug}`}>{course.name}</a>
+    </nav>
+
+    <header class="viewer__head">
+      <h1 class="viewer__title">
+        <span aria-hidden="true">{SLIDE_ICONS[slide.type] ?? '📄'}</span>
+        {slide.name}
+      </h1>
+      <p class="viewer__meta">
+        <span>Lesson {index + 1} of {flat.length}</span>
+        {slide.duration > 0 && <span>· {formatDuration(slide.duration)}</span>}
+      </p>
+    </header>
+
+    {locked || !content ? (
+      <EmptyState
+        title="This lesson is locked"
+        description="Join the course to get access to this content."
+      >
+        {user ? (
+          <Button href={`/courses/${course.slug}`}>Back to the course</Button>
+        ) : (
+          <Button href={`/login?next=${nextParam}`}>Sign in</Button>
+        )}
+      </EmptyState>
+    ) : (
+      <div class="viewer__content">
+        {content.video?.embed_url && (
+          <div class="viewer__video">
+            <iframe
+              src={content.video.embed_url}
+              title={content.name}
+              loading="lazy"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowfullscreen
+            ></iframe>
+          </div>
+        )}
+
+        {content.html_content && (
+          <article class="viewer__article" set:html={rewriteHtml(content.html_content)} />
+        )}
+
+        {content.type === 'infographic' && content.binary_url && (
+          <img class="viewer__infographic" src={binaryProxy} alt={content.name} />
+        )}
+
+        {content.type === 'document' && content.binary_url && (
+          <div class="viewer__download">
+            <p>This lesson is a downloadable document.</p>
+            <Button href={binaryProxy}>Download document</Button>
+          </div>
+        )}
+
+        {content.type === 'quiz' && (
+          <div class="quiz" data-quiz data-course-id={course.id} data-slide-id={slide.id}>
+            <p class="quiz__loading">Loading quiz…</p>
+          </div>
+        )}
+
+        {content.resources.length > 0 && (
+          <div class="viewer__resources">
+            <h2>Resources</h2>
+            <ul>
+              {content.resources.map((resource) => (
+                <li>
+                  <a href={resource.url} target="_blank" rel="noopener noreferrer">{resource.name}</a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {showComplete && (
+          <div class="viewer__complete" data-complete-box data-course-id={course.id} data-slide-id={slide.id}>
+            {slide.completed ? (
+              <Button class="complete-btn" variant="secondary" disabled>✓ Completed</Button>
+            ) : (
+              <Button class="complete-btn">Mark complete</Button>
+            )}
+          </div>
+        )}
+      </div>
+    )}
+
+    <nav class="viewer__nav" aria-label="Lesson navigation">
+      {prev && !prev.is_locked ? (
+        <Button href={`/courses/${course.slug}/${prev.slug}`} variant="secondary">← {prev.name}</Button>
+      ) : (
+        <span></span>
+      )}
+      {next && !next.is_locked ? (
+        <Button href={`/courses/${course.slug}/${next.slug}`} variant="secondary">{next.name} →</Button>
+      ) : (
+        <span></span>
+      )}
+    </nav>
+  </section>
+</Base>
+
+<script>
+  type ApiError = { code?: string; message?: string; details?: Record<string, unknown> };
+  type QuizAnswer = { id: number; text: string };
+  type QuizQuestion = { id: number; question: string; answers: QuizAnswer[] };
+
+  function handleError(error: ApiError | undefined): void {
+    if (error?.code === 'login_required') {
+      window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
+      return;
+    }
+    window.alert(error?.message ?? 'Something went wrong. Please try again.');
+  }
+
+  // "Mark complete" toggle.
+  const completeBox = document.querySelector<HTMLElement>('[data-complete-box]');
+  const completeButton = completeBox?.querySelector<HTMLButtonElement>('.complete-btn');
+  completeButton?.addEventListener('click', async () => {
+    if (completeButton.disabled) return;
+    completeButton.disabled = true;
+    const response = await fetch('/api/courses/complete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        course_id: Number(completeBox?.dataset.courseId),
+        slide_id: Number(completeBox?.dataset.slideId),
+      }),
+    });
+    if (response.ok) {
+      window.location.reload();
+      return;
+    }
+    completeButton.disabled = false;
+    const payload = (await response.json().catch(() => ({}))) as { error?: ApiError };
+    handleError(payload.error);
+  });
+
+  // Quiz player.
+  const quizBox = document.querySelector<HTMLElement>('[data-quiz]');
+  if (quizBox) void initQuiz(quizBox);
+
+  async function initQuiz(box: HTMLElement): Promise<void> {
+    const courseId = Number(box.dataset.courseId);
+    const slideId = Number(box.dataset.slideId);
+    const response = await fetch(`/api/courses/quiz?course_id=${courseId}&slide_id=${slideId}`);
+    const payload = (await response.json().catch(() => ({}))) as {
+      data?: { questions?: QuizQuestion[] } | QuizQuestion[];
+      error?: ApiError;
+    };
+    if (!response.ok) {
+      renderQuizMessage(box, payload.error?.code === 'login_required'
+        ? 'Sign in to take this quiz.'
+        : payload.error?.message ?? 'The quiz could not be loaded.');
+      if (payload.error?.code === 'login_required') renderSignIn(box);
+      return;
+    }
+    const raw = payload.data;
+    const questions = Array.isArray(raw) ? raw : (raw?.questions ?? []);
+    if (questions.length === 0) {
+      renderQuizMessage(box, 'This quiz has no questions yet.');
+      return;
+    }
+    renderQuiz(box, courseId, slideId, questions);
+  }
+
+  function renderQuizMessage(box: HTMLElement, message: string): void {
+    const p = document.createElement('p');
+    p.className = 'quiz__message';
+    p.textContent = message;
+    box.replaceChildren(p);
+  }
+
+  function renderSignIn(box: HTMLElement): void {
+    const link = document.createElement('a');
+    link.className = 'quiz__signin';
+    link.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
+    link.textContent = 'Sign in';
+    box.append(link);
+  }
+
+  function renderQuiz(
+    box: HTMLElement,
+    courseId: number,
+    slideId: number,
+    questions: QuizQuestion[],
+  ): void {
+    const form = document.createElement('form');
+    form.className = 'quiz__form';
+    form.noValidate = true;
+
+    questions.forEach((question, qIndex) => {
+      const fieldset = document.createElement('fieldset');
+      fieldset.className = 'quiz__question';
+      const legend = document.createElement('legend');
+      legend.className = 'quiz__legend';
+      legend.textContent = `${qIndex + 1}. ${question.question}`;
+      fieldset.append(legend);
+      for (const answer of question.answers) {
+        const label = document.createElement('label');
+        label.className = 'quiz__answer';
+        const input = document.createElement('input');
+        input.type = 'radio';
+        input.name = `q${question.id}`;
+        input.value = String(answer.id);
+        input.required = true;
+        const text = document.createElement('span');
+        text.textContent = answer.text;
+        label.append(input, text);
+        fieldset.append(label);
+      }
+      form.append(fieldset);
+    });
+
+    const error = document.createElement('p');
+    error.className = 'quiz__error';
+    error.hidden = true;
+    form.append(error);
+
+    const submit = document.createElement('button');
+    submit.type = 'submit';
+    submit.className = 'quiz__submit';
+    submit.textContent = 'Submit answers';
+    form.append(submit);
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      error.hidden = true;
+      const answers: Record<string, number> = {};
+      for (const question of questions) {
+        const checked = form.querySelector<HTMLInputElement>(`input[name="q${question.id}"]:checked`);
+        if (!checked) {
+          error.textContent = 'Please answer every question.';
+          error.hidden = false;
+          return;
+        }
+        answers[String(question.id)] = Number(checked.value);
+      }
+      submit.disabled = true;
+      const response = await fetch('/api/courses/quiz', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ course_id: courseId, slide_id: slideId, answers }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as {
+        data?: Record<string, unknown>;
+        error?: ApiError;
+      };
+      if (!response.ok) {
+        submit.disabled = false;
+        if (payload.error?.code === 'login_required') {
+          handleError(payload.error);
+          return;
+        }
+        error.textContent = payload.error?.message ?? 'The quiz could not be submitted.';
+        error.hidden = false;
+        return;
+      }
+      renderResult(box, payload.data ?? {});
+    });
+
+    box.replaceChildren(form);
+  }
+
+  function renderResult(box: HTMLElement, data: Record<string, unknown>): void {
+    const panel = document.createElement('div');
+    panel.className = 'quiz__result';
+    const title = document.createElement('p');
+    title.className = 'quiz__result-title';
+    title.textContent = 'Quiz submitted ✓';
+    panel.append(title);
+
+    const parts: string[] = [];
+    if (typeof data.correct === 'number' && typeof data.total === 'number') {
+      parts.push(`${data.correct} / ${data.total} correct`);
+    }
+    if (typeof data.points === 'number') parts.push(`${data.points} points`);
+    if (typeof data.karma_won === 'number' && data.karma_won > 0) parts.push(`+${data.karma_won} karma`);
+    if (typeof data.completion === 'number') parts.push(`course progress ${data.completion}%`);
+    const detail = document.createElement('p');
+    detail.className = 'quiz__result-detail';
+    detail.textContent = parts.length > 0 ? parts.join(' · ') : 'Your answers were recorded.';
+    panel.append(detail);
+
+    const back = document.createElement('a');
+    back.className = 'quiz__result-link';
+    back.href = window.location.pathname.split('/').slice(0, -1).join('/');
+    back.textContent = 'Back to the course';
+    panel.append(back);
+
+    box.replaceChildren(panel);
+  }
+</script>
+
+<style>
+  .viewer__crumbs {
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-subtle);
+    margin-bottom: var(--od-space-3);
+  }
+  .viewer__head { margin-bottom: var(--od-space-5); }
+  .viewer__title {
+    display: flex;
+    align-items: baseline;
+    gap: var(--od-space-2);
+    margin-bottom: var(--od-space-1);
+  }
+  .viewer__meta {
+    display: flex;
+    gap: var(--od-space-2);
+    margin: 0;
+    font-size: var(--od-text-sm);
+    color: var(--od-fg-subtle);
+  }
+
+  .viewer__content { max-width: 900px; }
+  .viewer__video {
+    aspect-ratio: 16 / 9;
+    background: var(--od-bg-inset);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-l);
+    overflow: hidden;
+    margin-bottom: var(--od-space-5);
+  }
+  .viewer__video iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    display: block;
+  }
+  .viewer__article { color: var(--od-fg-muted); overflow-wrap: anywhere; }
+  .viewer__article :global(img) { border-radius: var(--od-radius-m); }
+  .viewer__article :global(pre) {
+    background: var(--od-bg-inset);
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-m);
+    padding: var(--od-space-3);
+    overflow-x: auto;
+  }
+  .viewer__infographic {
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-l);
+    margin-bottom: var(--od-space-5);
+  }
+  .viewer__download {
+    padding: var(--od-space-5);
+    border: 1px dashed var(--od-border-strong);
+    border-radius: var(--od-radius-l);
+    margin-bottom: var(--od-space-5);
+  }
+  .viewer__download p { margin-bottom: var(--od-space-3); }
+
+  .viewer__resources { margin-top: var(--od-space-6); }
+  .viewer__resources ul {
+    margin: 0;
+    padding-left: var(--od-space-5);
+    color: var(--od-fg-muted);
+  }
+
+  .viewer__complete { margin-top: var(--od-space-6); }
+
+  .viewer__nav {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--od-space-3);
+    margin-top: var(--od-space-7);
+    padding-top: var(--od-space-5);
+    border-top: 1px solid var(--od-border);
+  }
+
+  /* Quiz player: markup is created at runtime → style via :global under the
+     scoped .quiz root. */
+  .quiz {
+    border: 1px solid var(--od-border);
+    border-radius: var(--od-radius-l);
+    background: var(--od-bg-raised);
+    padding: var(--od-space-5);
+    margin-bottom: var(--od-space-5);
+  }
+  .quiz__loading { margin: 0; color: var(--od-fg-subtle); }
+  .quiz :global(.quiz__message) { margin: 0; color: var(--od-fg-muted); }
+  .quiz :global(.quiz__question) {
+    border: none;
+    border-bottom: 1px solid var(--od-border);
+    margin: 0 0 var(--od-space-4);
+    padding: 0 0 var(--od-space-4);
+  }
+  .quiz :global(.quiz__legend) {
+    font-weight: 600;
+    color: var(--od-fg);
+    margin-bottom: var(--od-space-2);
+    padding: 0;
+  }
+  .quiz :global(.quiz__answer) {
+    display: flex;
+    align-items: center;
+    gap: var(--od-space-2);
+    padding: var(--od-space-1) 0;
+    color: var(--od-fg-muted);
+    cursor: pointer;
+  }
+  .quiz :global(.quiz__answer:hover) { color: var(--od-fg); }
+  .quiz :global(.quiz__answer input) { accent-color: var(--od-accent); }
+  .quiz :global(.quiz__error) {
+    color: var(--od-danger);
+    font-size: var(--od-text-sm);
+  }
+  .quiz :global(.quiz__submit) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--od-space-2) var(--od-space-4);
+    background: var(--od-accent);
+    color: var(--od-accent-fg);
+    border: 1px solid transparent;
+    border-radius: var(--od-radius-m);
+    font: inherit;
+    font-size: var(--od-text-sm);
+    font-weight: 550;
+    cursor: pointer;
+    transition: background var(--od-dur-fast) var(--od-ease);
+  }
+  .quiz :global(.quiz__submit:hover) { background: var(--od-accent-hover); }
+  .quiz :global(.quiz__submit:disabled) { opacity: 0.5; cursor: not-allowed; }
+  .quiz :global(.quiz__result-title) {
+    font-size: var(--od-text-lg);
+    font-weight: 600;
+    color: var(--od-success);
+    margin-bottom: var(--od-space-2);
+  }
+  .quiz :global(.quiz__result-detail) { color: var(--od-fg-muted); }
+</style>
