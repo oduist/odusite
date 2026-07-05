@@ -8,7 +8,7 @@ import { formValues, packFormError, redirect303, safePath } from '../../lib';
 
 export const prerender = false;
 
-const ADDRESS_FIELDS = ['name', 'phone', 'street', 'street2', 'city', 'zip', 'country_id', 'state_id'];
+const ADDRESS_FIELDS = ['name', 'email', 'phone', 'street', 'street2', 'city', 'zip', 'country_id', 'state_id'];
 
 export const POST: APIRoute = async (context) => {
   if (!context.locals.user) return redirect303(context, '/login?next=%2Fportal%2Faddresses');

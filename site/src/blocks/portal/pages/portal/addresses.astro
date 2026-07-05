@@ -11,13 +11,37 @@ import AddressFields from '../../components/AddressFields.astro';
 import Notice from '../../components/Notice.astro';
 import { apiFetch } from '@lib/api/client';
 import { loginRedirect, portalApi, unpackFormError } from '../../lib';
-import type { Country, PortalAddress } from '../../types';
+import type { Country, PortalAddress, PortalAddressBook } from '../../types';
 
 export const prerender = false;
 if (!Astro.locals.user) return loginRedirect(Astro);
 
-const addresses = await portalApi<PortalAddress[]>(Astro, '/me/addresses');
-if (addresses instanceof Response) return addresses;
+const book = await portalApi<PortalAddressBook>(Astro, '/me/addresses');
+if (book instanceof Response) return book;
+
+// The API groups addresses as {billing, delivery}; flatten to one row per
+// unique partner (a contact can serve both roles), billing label winning.
+const addressMap = new Map<number, PortalAddress>();
+for (const group of ['billing', 'delivery'] as const) {
+  for (const item of book[group] ?? []) {
+    if (addressMap.has(item.id)) continue;
+    addressMap.set(item.id, {
+      id: item.id,
+      address_type: group,
+      name: item.name,
+      street: item.street,
+      street2: item.street2,
+      city: item.city,
+      zip: item.zip,
+      state: item.state,
+      country: item.country?.name ?? null,
+      country_id: item.country?.id ?? null,
+      phone: item.phone,
+      email: item.email,
+    });
+  }
+}
+const addresses = [...addressMap.values()];
 
 const params = Astro.url.searchParams;
 const saved = params.get('saved') === '1';
@@ -41,6 +65,7 @@ if (showForm) {
 const formType = editing?.address_type ?? (addType === 'delivery' ? 'delivery' : 'billing');
 const values: Record<string, string> = formError?.values ?? {
   name: editing?.name ?? '',
+  email: editing?.email ?? '',
   phone: editing?.phone ?? '',
   street: editing?.street ?? '',
   street2: editing?.street2 ?? '',
@@ -89,7 +114,10 @@ function formatLines(address: PortalAddress): string[] {
         />
         <div class="addr__row">
           <Input label="Name" name="name" required value={values.name} error={errors.name} autocomplete="name" />
-          <Input label="Phone" name="phone" type="tel" value={values.phone} error={errors.phone} autocomplete="tel" />
+          <Input label="Email" name="email" type="email" required value={values.email} error={errors.email} autocomplete="email" />
+        </div>
+        <div class="addr__row">
+          <Input label="Phone" name="phone" type="tel" required value={values.phone} error={errors.phone} autocomplete="tel" />
         </div>
         <AddressFields countries={countries} values={values} errors={errors} />
         <div class="addr__form-actions">

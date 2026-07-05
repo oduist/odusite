@@ -27,6 +27,26 @@ export interface MeProfile {
   partner: MePartner;
 }
 
+// Item as returned inside the /me/addresses {billing, delivery} groups.
+export interface PortalAddressItem {
+  id: number;
+  name?: string | null;
+  street?: string | null;
+  street2?: string | null;
+  city?: string | null;
+  zip?: string | null;
+  state?: string | null;
+  country?: { id: number; code: string; name: string } | null;
+  phone?: string | null;
+  email?: string | null;
+}
+
+export interface PortalAddressBook {
+  billing: PortalAddressItem[];
+  delivery: PortalAddressItem[];
+}
+
+// Flattened, UI-facing address (one row per unique partner).
 export interface PortalAddress {
   id: number;
   address_type: 'billing' | 'delivery';

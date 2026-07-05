@@ -327,16 +327,20 @@ Astro.response.headers.set('X-Odusite-Tags', `courses,courses:${course.id}`);
   function renderResult(box: HTMLElement, data: Record<string, unknown>): void {
     const panel = document.createElement('div');
     panel.className = 'quiz__result';
+    // The API returns per-question results in `answers` ({qid: {is_correct}})
+    // plus `completed`, `completion` and `karma_won`.
+    const answers = (data.answers ?? {}) as Record<string, { is_correct?: boolean }>;
+    const total = Object.keys(answers).length;
+    const correct = Object.values(answers).filter((a) => a.is_correct).length;
+    const passed = data.completed === true;
+
     const title = document.createElement('p');
     title.className = 'quiz__result-title';
-    title.textContent = 'Quiz submitted ✓';
+    title.textContent = passed ? 'Passed ✓' : 'Not quite — try again';
     panel.append(title);
 
     const parts: string[] = [];
-    if (typeof data.correct === 'number' && typeof data.total === 'number') {
-      parts.push(`${data.correct} / ${data.total} correct`);
-    }
-    if (typeof data.points === 'number') parts.push(`${data.points} points`);
+    if (total > 0) parts.push(`${correct} / ${total} correct`);
     if (typeof data.karma_won === 'number' && data.karma_won > 0) parts.push(`+${data.karma_won} karma`);
     if (typeof data.completion === 'number') parts.push(`course progress ${data.completion}%`);
     const detail = document.createElement('p');

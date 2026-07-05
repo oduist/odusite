@@ -6,7 +6,7 @@ import Button from '@theme/Button.astro';
 import Hero from '@theme/Hero.astro';
 import EmptyState from '@theme/EmptyState.astro';
 import { apiFetch, imgUrl, OdusiteApiError } from '@lib/api/client';
-import { flattenCurriculum, formatDuration, ratingStars, rewriteHtml, SLIDE_ICONS } from '../../lib';
+import { flattenCurriculum, formatDuration, ratingStars, rewriteHtml, stripHtml, SLIDE_ICONS } from '../../lib';
 import type { CourseDetail } from '../../types';
 
 export const prerender = false;
@@ -37,10 +37,10 @@ Astro.response.headers.set('X-Odusite-Tags', `courses,courses:${course.id}`);
 
 <Base
   title={course.seo?.title ?? `${course.name} — Courses`}
-  description={course.seo?.description ?? course.description_short}
+  description={course.seo?.description ?? stripHtml(course.description_short)}
   ogImage={course.seo?.og_image ?? imgUrl(course.cover)}
 >
-  <Hero title={course.name} subtitle={course.description_short} image={imgUrl(course.cover)}>
+  <Hero title={course.name} subtitle={stripHtml(course.description_short)} image={imgUrl(course.cover)}>
     <div class="course-cta">
       {course.is_member ? (
         <div class="course-progress-wrap">

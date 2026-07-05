@@ -3,7 +3,7 @@
 import Badge from '@theme/Badge.astro';
 import Card from '@theme/Card.astro';
 import { imgUrl } from '@lib/api/client';
-import { formatDuration, ratingStars } from '../lib';
+import { formatDuration, ratingStars, stripHtml } from '../lib';
 import type { CourseListItem } from '../types';
 
 interface Props {
@@ -30,7 +30,7 @@ const duration = formatDuration(course.total_time);
       {course.enroll === 'payment' && <Badge tone="info">Paid</Badge>}
     </div>
     <h3 class="course-card__name">{course.name}</h3>
-    {course.description_short && <p class="course-card__desc">{course.description_short}</p>}
+    {course.description_short && <p class="course-card__desc">{stripHtml(course.description_short)}</p>}
     <p class="course-card__stats">
       {duration && <span title="Total duration">{duration}</span>}
       <span title="Enrolled members">{course.members_count} members</span>

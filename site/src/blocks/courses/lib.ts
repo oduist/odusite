@@ -7,6 +7,17 @@ export function rewriteHtml(html: string | null | undefined): string {
   return html.replaceAll('="/web/image', '="/img');
 }
 
+/** slide.channel.description_short is an HTML field; flatten to plain text
+ * for card and hero-subtitle slots. */
+export function stripHtml(html: string | null | undefined): string {
+  if (!html) return '';
+  return html
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export const SLIDE_ICONS: Record<SlideType, string> = {
   video: '🎬',
   document: '📄',
