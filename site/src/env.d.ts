@@ -7,6 +7,7 @@ type Runtime = import('@astrojs/cloudflare').Runtime<
 declare namespace App {
   interface Locals extends Runtime {
     lang: string;
+    locale: string;
     user: { id: number; name: string; email: string } | null;
   }
 }

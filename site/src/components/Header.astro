@@ -2,6 +2,7 @@
 import config from 'virtual:odusite/config';
 import { getSiteConfig } from '@lib/api/base';
 import { imgUrl } from '@lib/api/client';
+import LangSwitcher from '@components/LangSwitcher.astro';
 
 const site = await getSiteConfig(Astro).catch(() => null);
 const logo = imgUrl(site?.logo);
@@ -39,6 +40,7 @@ const current = Astro.url.pathname;
           </svg>
         </a>
       )}
+      <LangSwitcher />
       {showPortal && (
         user
           ? <a class="od-header__account" href="/portal">{user.name || 'Account'}</a>

@@ -31,12 +31,36 @@
 ## i18n
 
 - Available languages come from `GET /odusite/v1/site` (`website.language_ids`,
-  `default_lang_id`, url codes).
+  `default_lang_id`, url codes) — data-driven, so enabling a language in Odoo
+  lights up its site prefix. Resolved once per request in `src/lib/i18n.ts`
+  (memoized) with a single-default static fallback so routing never hard-breaks
+  when Odoo is unreachable.
 - URL scheme mirrors Odoo: default language unprefixed, others `/<url_code>/...`.
-  The site passes `?lang=<code>` on every API call; Odoo activates the lang
-  context so translated fields (translate=True / html_translate) come localized.
-- `hreflang` alternates rendered for every localized page.
+  The **middleware** owns routing (block routes are injected once, without
+  prefixes): a non-default prefix (`/ru/...`) is stripped via an internal
+  rewrite while `locals.lang` (Odoo code, e.g. `ru_RU`) is set so every API
+  call returns localized fields; the choice is stored in the `od_lang` cookie so
+  later unprefixed navigation stays localized. An explicit default prefix
+  (`/en/...`) is the "switch back to default" signal: it resets the cookie and
+  **302-redirects** to the clean canonical path.
+- The `od_lang` cookie is the persistence layer; on an unprefixed path the
+  cookie language wins, else the site default.
+- Anonymous edge-cache keys include the active `lang` so localized responses
+  never cross-serve (`lib/cache.ts`).
+- `hreflang` alternates (clean default, prefixed others) rendered in the base
+  layout for every page.
+- The language switcher (`components/LangSwitcher.astro`) is a no-JS `<details>`
+  in the header, shown only when >1 language is enabled; every option links with
+  an explicit locale prefix.
 - UI strings of the site itself live in the site's i18n catalog
   (`site/src/i18n/<lang>.json`) — not in Odoo.
-- The `od_lang` cookie stores the visitor's choice; language switcher is part
-  of the core layout.
+
+## View Transitions
+
+- The base layout mounts `<ClientRouter />` (`astro:transitions`): navigations
+  are same-document morphs (SPA feel) with SSR fallback. This is also the
+  substrate for a persistent voice-assistant island (`transition:persist`).
+- Operational note: after enabling a new Odoo language at runtime, restart the
+  Odoo workers once — `res.lang` is ormcached, and a language activated in a
+  side process is otherwise rejected (`Invalid language code`) until the cache
+  refreshes.

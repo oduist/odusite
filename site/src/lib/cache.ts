@@ -13,8 +13,11 @@ type Ctx = APIContext | AstroGlobal;
 const CACHE_NAME = 'odusite:pages';
 export const TAGS_HEADER = 'X-Odusite-Tags';
 
-function cacheKey(url: URL): Request {
+function cacheKey(url: URL, lang: string): Request {
   const normalized = new URL(url);
+  // Localized responses must not collide: an anonymous visitor's language is a
+  // cache dimension (the same path renders different content per `lang`).
+  normalized.searchParams.set('__lang', lang);
   normalized.searchParams.sort();
   return new Request(normalized.toString(), { method: 'GET' });
 }
@@ -22,7 +25,7 @@ function cacheKey(url: URL): Request {
 export async function matchPage(ctx: Ctx): Promise<Response | undefined> {
   if (typeof caches === 'undefined') return undefined;
   const cache = await caches.open(CACHE_NAME);
-  return cache.match(cacheKey(new URL(ctx.request.url)));
+  return cache.match(cacheKey(new URL(ctx.request.url), (ctx.locals as App.Locals).lang));
 }
 
 /** Store a cacheable response and index its tags. Returns the response to
@@ -31,7 +34,7 @@ export function storePage(ctx: Ctx, response: Response): Response {
   if (typeof caches === 'undefined') return response;
   const clone = response.clone();
   const runtime = (ctx.locals as App.Locals).runtime;
-  const url = cacheKey(new URL(ctx.request.url)).url;
+  const url = cacheKey(new URL(ctx.request.url), (ctx.locals as App.Locals).lang).url;
   const tags = (response.headers.get(TAGS_HEADER) ?? '').split(',').filter(Boolean);
   const task = (async () => {
     const cache = await caches.open(CACHE_NAME);
