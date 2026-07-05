@@ -29,3 +29,9 @@ class OdusiteApi(models.AbstractModel):
         """Whitelist for the generic form endpoint:
         {model_name: {'fields': [...], 'required': [...]}}."""
         return {}
+
+    def _odusite_public_asset_url(self, record, field):
+        """Direct public URL of a binary field's original, when object storage
+        exposes one. Returns ``None`` in odusite_base (only the /img proxy is
+        available); ``odusite_s3`` overrides this to return the R2/CDN URL."""
+        return None

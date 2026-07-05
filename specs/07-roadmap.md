@@ -8,7 +8,7 @@ Status: ✅ done · 🚧 in progress · ⬜ planned.
 | Area | Addon | Block | Status |
 |---|---|---|---|
 | API core, webhooks, sitemap, site config | odusite_base | core | ✅ |
-| JWT auth, /my home, account, addresses, security | odusite_portal | portal | ✅ |
+| JWT auth (login/refresh/logout, signup + email double opt-in confirm/resend), /my home, account, addresses, security | odusite_portal | portal | ✅ |
 | Blog (posts, tags, comments read) | odusite_blog | blog | ✅ |
 | Contact forms → crm.lead | odusite_crm | forms | ✅ |
 | Catalog, variants, cart, checkout, portal orders (sign/decline/pay) | odusite_sale | shop | ✅ |
@@ -22,6 +22,7 @@ Status: ✅ done · 🚧 in progress · ⬜ planned.
 | Courses (catalog, course page, enroll public, progress) | odusite_slides | courses | ✅ |
 | Newsletter subscribe (footer form) | odusite_mass_mailing | newsletter | ✅ |
 | Unified site search (`/search`) | odusite_base | core | ✅ |
+| S3/R2 attachment offload (selective, presigned + hybrid public URLs) | odusite_s3 | — | ✅ |
 | Astro scaffold, theming, default dark theme | — | — | ✅ |
 | CI (addon tests on odoo:19.0 + site check/build) | — | — | ✅ |
 

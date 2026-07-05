@@ -15,6 +15,24 @@ def image_url(record, field, size=None):
     return sudo_record.env['website'].sudo().image_url(sudo_record, field, size=size)
 
 
+def public_asset(record, field, size=None):
+    """Hybrid image delivery (see specs/modules/odusite_s3.md).
+
+    Returns ``{'proxy': <relative /web/image URL>, 'original': <direct URL|None>}``
+    so the site chooses per context: thumbnails use the resized ``proxy`` (Odoo
+    resizes on the fly, edge-cached by ``unique``); full/download can use the
+    direct ``original`` when object storage exposes a public URL. ``original`` is
+    ``None`` unless ``odusite_s3`` is installed and the attachment is a public
+    S3-offloaded object with a public base URL configured.
+    """
+    if not record:
+        return {'proxy': None, 'original': None}
+    return {
+        'proxy': image_url(record, field, size=size),
+        'original': record.sudo().env['odusite.api']._odusite_public_asset_url(record, field),
+    }
+
+
 def seo(record):
     """SEO block from website.seo.metadata fields, with sane fallbacks."""
     sudo_record = record.sudo()

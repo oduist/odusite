@@ -62,10 +62,16 @@ Decision: cart = draft sale.order; `POST /shop/cart` returns
 Consequences: carts survive across devices via cookie only; abandoned-cart
 logic keys on orders, not sessions; token check on every mutation.
 
-## ADR-008 — No external Python deps in addons
+## ADR-008 — Minimal external Python deps in addons
 Context: deployment simplicity; Odoo hosts often restrict pip installs.
-Decision: JWT/HMAC implemented with the Python stdlib.
-Consequences: no RS256/JWKS; HS256 only (acceptable: single issuer=verifier).
+Decision: JWT/HMAC implemented with the Python stdlib. The one sanctioned
+external dependency is **boto3** in `odusite_s3` (ADR-012): a hand-rolled S3
+SigV4 client is too risky for production object storage, and boto3 is the
+industry standard (works with AWS S3 and Cloudflare R2). It is declared in the
+addon manifest `external_dependencies` so Odoo warns when it is missing; no
+other addon may add pip dependencies.
+Consequences: JWT stays stdlib-only (HS256, single issuer=verifier); object
+storage relies on boto3 where installed.
 
 ## ADR-009 — Images proxied through the site's `/img/**`
 Context: Odoo's `/web/image` already does resize + immutable caching via
@@ -80,3 +86,43 @@ Context: initially specs were started in Russian; the owner requires English
 artifacts (conversation stays in Russian).
 Decision: all repo artifacts (code, comments, specs, docs, commits) in English.
 Consequences: earlier Russian drafts rewritten.
+
+## ADR-011 — Portal identity via signed JWT, not a trusted `X-User-ID` header
+Context: an alternative "trusted subsystem" design was considered (the SSR
+worker asserts the caller with a plain `X-User-ID` header and Odoo switches
+context with `with_user()`, trusting it because the request carries the master
+token). Both models end up filtering data with Odoo Record Rules; they differ
+only in how the user identity is established.
+Decision: keep the JWT model (ADR-003). The user id is carried inside an
+HS256-signed access token that Odoo re-verifies on every request in
+`odusite_route` before `update_env(user=uid)`; identity cannot be forged
+without `odusite.jwt_secret`. `X-User-ID` would make identity *asserted* rather
+than *proven*, collapsing security onto the single assumption that nothing with
+the master token ever emits a wrong id.
+Consequences: stronger identity (two independent secrets: master token +
+jwt_secret; tamper-proof, short-lived, revocable). A trusted `X-User-ID` path
+may be added later **only** for server-side agents that legitimately act for a
+user without a browser session — behind the master token, explicitly logged,
+never replacing JWT for browser users.
+
+## ADR-012 — Object storage offload to S3/R2 (`odusite_s3`)
+Context: the ТЗ mandates that media and documents served to the frontend live
+on S3-compatible storage (Cloudflare R2, zero egress), not in Odoo's local
+filestore. In Odoo every binary (product images, blog/event covers, generated
+PDFs, uploaded CVs/attachments) is an `ir.attachment`, which exposes clean
+`_storage/_file_read/_file_write/_file_delete` hooks.
+Decision: a new addon `odusite_s3` offloads the `ir.attachment` filestore to
+S3/R2 via those hooks (boto3). Offload is **selective**: content attachments go
+to S3; Odoo backend web-asset bundles (JS/CSS) stay in the local filestore so
+the admin UI is not slowed by per-request S3 reads. Private documents are
+downloaded via **presigned URLs** (Odoo generates a short-lived signed GET URL;
+the SSR worker hands it to the user). Public images use a **hybrid** delivery:
+the API exposes the direct R2/CDN URL of the original, and the `/img` proxy
+stays for on-the-fly resized variants (Odoo resizes once, edge-cached by
+`unique`; source bytes now come from R2). New attachments go to S3 immediately;
+existing filestore entries migrate lazily via a server action/cron, not
+automatically.
+Consequences: media/documents scale independently of Odoo; bandwidth leaves
+Odoo/worker for public originals and private downloads; requires boto3
+(ADR-008) and R2/S3 credentials configured in Odoo settings. Complements — does
+not replace — ADR-009 (`/img` proxy remains for resizing).

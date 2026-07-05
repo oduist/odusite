@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="res_config_settings_view_form" model="ir.ui.view">
+        <field name="name">res.config.settings.view.form.inherit.odusite.s3</field>
+        <field name="model">res.config.settings</field>
+        <field name="inherit_id" ref="website.res_config_settings_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//app[@name='website']" position="inside">
+                <block title="Object Storage (S3 / R2)" name="odusite_s3_block">
+                    <setting string="Offload attachments to S3/R2"
+                             help="Store media and documents on S3-compatible object storage. Backend web assets stay on the local filestore.">
+                        <field name="odusite_s3_enabled"/>
+                    </setting>
+                    <setting string="Endpoint URL"
+                             help="S3-compatible endpoint. Leave empty for AWS S3."
+                             invisible="not odusite_s3_enabled">
+                        <field name="odusite_s3_endpoint_url"
+                               placeholder="https://&lt;account&gt;.r2.cloudflarestorage.com"/>
+                    </setting>
+                    <setting string="Region" help="Use 'auto' for Cloudflare R2."
+                             invisible="not odusite_s3_enabled">
+                        <field name="odusite_s3_region" placeholder="auto"/>
+                    </setting>
+                    <setting string="Bucket" invisible="not odusite_s3_enabled">
+                        <field name="odusite_s3_bucket" placeholder="odusite-media"/>
+                    </setting>
+                    <setting string="Access Key" invisible="not odusite_s3_enabled">
+                        <field name="odusite_s3_access_key"/>
+                    </setting>
+                    <setting string="Secret Key" invisible="not odusite_s3_enabled">
+                        <field name="odusite_s3_secret_key" password="True"/>
+                    </setting>
+                    <setting string="Public Base URL"
+                             help="Public CDN/R2 base URL for public originals. Empty => only the /img proxy and presigned URLs."
+                             invisible="not odusite_s3_enabled">
+                        <field name="odusite_s3_public_base_url" placeholder="https://media.example.com"/>
+                    </setting>
+                    <setting string="Presigned URL Expiry (s)"
+                             help="Lifetime of presigned GET URLs for private documents."
+                             invisible="not odusite_s3_enabled">
+                        <field name="odusite_s3_url_expiry"/>
+                    </setting>
+                    <setting string="Connection" help="Write and delete a probe object to validate the credentials."
+                             invisible="not odusite_s3_enabled">
+                        <button name="action_odusite_s3_test_connection" type="object"
+                                string="Test connection" class="btn-secondary"/>
+                    </setting>
+                </block>
+            </xpath>
+        </field>
+    </record>
+</odoo>

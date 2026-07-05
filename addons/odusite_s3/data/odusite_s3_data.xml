@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Server action: migrate the whole local filestore to S3 in one pass. -->
+    <record id="server_action_migrate_filestore" model="ir.actions.server">
+        <field name="name">Migrate filestore to S3</field>
+        <field name="model_id" ref="base.model_ir_attachment"/>
+        <field name="state">code</field>
+        <field name="code">migrated = env['ir.attachment']._odusite_s3_migrate_all()
+action = {
+    'type': 'ir.actions.client',
+    'tag': 'display_notification',
+    'params': {
+        'type': 'success',
+        'title': 'Object Storage',
+        'message': 'Migrated %s attachment(s) to S3.' % migrated,
+        'sticky': False,
+    },
+}</field>
+    </record>
+
+    <!-- Optional cron: drain the filestore to S3 in idempotent batches.
+         Inactive by default; enable it for large stores, disable once drained. -->
+    <record id="ir_cron_migrate_filestore" model="ir.cron">
+        <field name="name">Odusite S3: migrate filestore batch</field>
+        <field name="model_id" ref="base.model_ir_attachment"/>
+        <field name="state">code</field>
+        <field name="code">model._odusite_s3_migrate_batch()</field>
+        <field name="interval_number">10</field>
+        <field name="interval_type">minutes</field>
+        <field name="active" eval="False"/>
+    </record>
+</odoo>
