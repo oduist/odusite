@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="cron_process_webhook_queue" model="ir.cron">
+        <field name="name">Odusite: send cache invalidation webhooks</field>
+        <field name="model_id" ref="model_odusite_webhook_event"/>
+        <field name="state">code</field>
+        <field name="code">model._process_queue()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">minutes</field>
+        <field name="active" eval="True"/>
+    </record>
+    <record id="cron_gc_webhook_queue" model="ir.cron">
+        <field name="name">Odusite: garbage-collect webhook events</field>
+        <field name="model_id" ref="model_odusite_webhook_event"/>
+        <field name="state">code</field>
+        <field name="code">model._gc()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">days</field>
+        <field name="active" eval="True"/>
+    </record>
+</odoo>
