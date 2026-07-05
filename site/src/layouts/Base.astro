@@ -4,7 +4,9 @@ import { ClientRouter } from 'astro:transitions';
 import Header from '@components/Header.astro';
 import Footer from '@components/Footer.astro';
 import SEO from '@components/SEO.astro';
+import VoiceAssistant from '@components/VoiceAssistant.astro';
 import { getLocaleInfo, localizePath } from '@lib/i18n';
+import { getEnv } from '@lib/env';
 
 interface Props {
   title: string;
@@ -19,6 +21,10 @@ const props = Astro.props;
 // the locale-neutral path — use it to build hreflang alternates.
 const info = await getLocaleInfo(Astro).catch(() => null);
 const neutralPath = Astro.url.pathname;
+
+// The voice assistant island renders only when an ElevenLabs agent is
+// configured server-side (zero JS otherwise).
+const voiceEnabled = Boolean(getEnv(Astro).ELEVENLABS_AGENT_ID);
 ---
 
 <!doctype html>
@@ -44,5 +50,6 @@ const neutralPath = Astro.url.pathname;
       <slot />
     </main>
     <Footer />
+    {voiceEnabled && <VoiceAssistant />}
   </body>
 </html>

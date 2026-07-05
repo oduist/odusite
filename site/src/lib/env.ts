@@ -10,6 +10,8 @@ export interface OdusiteEnv {
   PUBLIC_SITE_URL: string;
   TURNSTILE_SECRET_KEY?: string;
   PUBLIC_TURNSTILE_SITE_KEY?: string;
+  ELEVENLABS_API_KEY?: string;
+  ELEVENLABS_AGENT_ID?: string;
   ODUSITE_CACHE_TAGS?: KVNamespace;
 }
 
@@ -28,6 +30,8 @@ export function getEnv(ctx: Ctx): OdusiteEnv {
     TURNSTILE_SECRET_KEY: cf.TURNSTILE_SECRET_KEY ?? import.meta.env.TURNSTILE_SECRET_KEY,
     PUBLIC_TURNSTILE_SITE_KEY:
       cf.PUBLIC_TURNSTILE_SITE_KEY ?? import.meta.env.PUBLIC_TURNSTILE_SITE_KEY,
+    ELEVENLABS_API_KEY: cf.ELEVENLABS_API_KEY ?? import.meta.env.ELEVENLABS_API_KEY,
+    ELEVENLABS_AGENT_ID: cf.ELEVENLABS_AGENT_ID ?? import.meta.env.ELEVENLABS_AGENT_ID,
     ODUSITE_CACHE_TAGS: cf.ODUSITE_CACHE_TAGS,
   };
 }

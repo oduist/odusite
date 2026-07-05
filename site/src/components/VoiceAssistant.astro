@@ -1,0 +1,174 @@
+---
+// Voice assistant island (ElevenLabs Conversational AI). Rendered by Base only
+// when the server has an agent configured. The API key stays server-side; the
+// browser fetches a short-lived signed URL from /api/voice/signed-url and drives
+// a WebRTC/WebSocket conversation. The agent can call two client tools —
+// navigate(path) and search_site(query) — wired to the View Transitions router,
+// so the assistant moves the visitor around the site hands-free.
+//
+// The widget is transition:persist so an ongoing call survives page navigation.
+// The SDK is dynamically imported on first use, so an idle visitor pays no JS.
+---
+
+<div id="od-voice" class="od-voice" transition:persist>
+  <button
+    id="od-voice-btn"
+    class="od-voice__btn"
+    type="button"
+    aria-label="Talk to the assistant"
+    aria-pressed="false"
+  >
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <rect x="9" y="3" width="6" height="11" rx="3" />
+      <path d="M6 11a6 6 0 0 0 12 0" />
+      <path d="M12 17v4" />
+    </svg>
+  </button>
+  <span id="od-voice-status" class="od-voice__status" role="status" aria-live="polite"></span>
+</div>
+
+<script>
+  import { navigate } from 'astro:transitions/client';
+
+  // The live conversation is kept on window so it survives both View Transitions
+  // (the widget is transition:persist) and any re-run of this module script.
+  declare global {
+    interface Window {
+      __odVoiceConv?: { endSession: () => Promise<void> } | null;
+    }
+  }
+
+  function initVoice() {
+    const btn = document.getElementById('od-voice-btn');
+    if (!btn || btn.dataset.bound) return;
+    btn.dataset.bound = '1';
+
+    const statusEl = document.getElementById('od-voice-status');
+    const setStatus = (s: string) => {
+      if (statusEl) statusEl.textContent = s;
+    };
+    const setActive = (on: boolean) => {
+      btn.setAttribute('aria-pressed', String(on));
+      btn.classList.toggle('is-active', on);
+    };
+    // Clears call state only; the caller sets the status message so an error
+    // string isn't wiped immediately after being shown.
+    const reset = () => {
+      window.__odVoiceConv = null;
+      setActive(false);
+    };
+
+    const clientTools = {
+      navigate: async ({ path }: { path?: string }) => {
+        if (typeof path === 'string' && path.startsWith('/')) {
+          await navigate(path);
+          return `Opened ${path}`;
+        }
+        return 'That path is not valid.';
+      },
+      search_site: async ({ query }: { query?: string }) => {
+        const q = String(query ?? '').trim();
+        if (!q) return 'No search query given.';
+        await navigate(`/search?q=${encodeURIComponent(q)}`);
+        return `Showing results for ${q}.`;
+      },
+    };
+
+    btn.addEventListener('click', async () => {
+      if (window.__odVoiceConv) {
+        try {
+          await window.__odVoiceConv.endSession();
+        } catch {
+          /* ignore */
+        }
+        reset();
+        setStatus('');
+        return;
+      }
+      setStatus('Connecting…');
+      try {
+        const res = await fetch('/api/voice/signed-url');
+        if (!res.ok) {
+          setStatus('Voice unavailable');
+          return;
+        }
+        const { signed_url: signedUrl } = (await res.json()) as { signed_url: string };
+        const { Conversation } = await import('@elevenlabs/client');
+        window.__odVoiceConv = await Conversation.startSession({
+          signedUrl,
+          clientTools,
+          onStatusChange: ({ status }: { status: string }) => {
+            if (status === 'connected') {
+              setActive(true);
+              setStatus('Listening…');
+            } else if (status === 'disconnected') {
+              reset();
+              setStatus('');
+            }
+          },
+          onModeChange: ({ mode }: { mode: string }) => {
+            setStatus(mode === 'speaking' ? 'Speaking…' : 'Listening…');
+          },
+          onError: () => {
+            reset();
+            setStatus('Something went wrong');
+          },
+        });
+      } catch {
+        // Most often a denied microphone permission.
+        reset();
+        setStatus('Microphone needed');
+      }
+    });
+  }
+
+  document.addEventListener('astro:page-load', initVoice);
+</script>
+
+<style>
+  .od-voice {
+    position: fixed;
+    right: var(--od-space-5, 1.25rem);
+    bottom: var(--od-space-5, 1.25rem);
+    z-index: 80;
+    display: flex;
+    align-items: center;
+    gap: var(--od-space-3, 0.75rem);
+    flex-direction: row-reverse;
+  }
+  .od-voice__btn {
+    width: 3.25rem;
+    height: 3.25rem;
+    border-radius: var(--od-radius-full, 999px);
+    border: 1px solid var(--od-border-strong, rgba(255, 255, 255, 0.2));
+    background: var(--od-accent, #6366f1);
+    color: var(--od-accent-fg, #fff);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: var(--od-shadow-lg, 0 10px 30px rgba(0, 0, 0, 0.35));
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .od-voice__btn:hover { transform: translateY(-1px); }
+  .od-voice__btn.is-active {
+    background: var(--od-danger, #ef4444);
+    animation: od-voice-pulse 1.6s ease-in-out infinite;
+  }
+  .od-voice__status {
+    font-size: var(--od-text-sm, 0.875rem);
+    color: var(--od-fg-muted, #9ca3af);
+    background: color-mix(in srgb, var(--od-bg, #111) 85%, transparent);
+    padding: var(--od-space-1, 0.25rem) var(--od-space-3, 0.75rem);
+    border-radius: var(--od-radius-full, 999px);
+    white-space: nowrap;
+  }
+  .od-voice__status:empty { display: none; }
+  @keyframes od-voice-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--od-danger, #ef4444) 55%, transparent); }
+    50% { box-shadow: 0 0 0 10px transparent; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .od-voice__btn.is-active { animation: none; }
+  }
+</style>

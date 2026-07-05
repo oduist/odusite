@@ -22,7 +22,10 @@ Status: ✅ done · 🚧 in progress · ⬜ planned.
 | Courses (catalog, course page, enroll public, progress) | odusite_slides | courses | ✅ |
 | Newsletter subscribe (footer form) | odusite_mass_mailing | newsletter | ✅ |
 | Unified site search (`/search`) | odusite_base | core | ✅ |
-| S3/R2 attachment offload (selective, presigned + hybrid public URLs) | odusite_s3 | — | ✅ |
+| S3/R2 attachment offload (s3:// marker, deferred GC, threaded migration, presigned + hybrid public URLs, /web/content redirect) | odusite_s3 | — | ✅ |
+| View Transitions (SPA navigations) | — | — | ✅ |
+| i18n locale-prefix routing (`/ru/…`) + language switcher + hreflang | — | — | ✅ |
+| Voice assistant (ElevenLabs, navigate/search client tools) — optional, env-gated | — | — | ✅ |
 | Astro scaffold, theming, default dark theme | — | — | ✅ |
 | CI (addon tests on odoo:19.0 + site check/build) | — | — | ✅ |
 
