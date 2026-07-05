@@ -8,14 +8,30 @@
             <xpath expr="//app[@name='website']" position="inside">
                 <block title="Object Storage (S3 / R2)" name="odusite_s3_block">
                     <setting string="Offload attachments to S3/R2"
-                             help="Store media and documents on S3-compatible object storage. Backend web assets stay on the local filestore.">
+                             help="Store media and documents on S3-compatible object storage. Backend web assets and small thumbnails stay on the local filestore.">
                         <field name="odusite_s3_enabled"/>
+                    </setting>
+                    <setting string="Status" help="Live connection check against the configured bucket."
+                             invisible="not odusite_s3_enabled">
+                        <field name="odusite_s3_status" readonly="1"/>
+                        <div class="text-muted">
+                            Credentials are read from odoo.conf / environment
+                            (<code>odusite_s3_bucket</code>, <code>odusite_s3_access_key</code>,
+                            <code>odusite_s3_secret_key</code>, ...) first, then from the
+                            fields below.
+                        </div>
                     </setting>
                     <setting string="Endpoint URL"
                              help="S3-compatible endpoint. Leave empty for AWS S3."
                              invisible="not odusite_s3_enabled">
                         <field name="odusite_s3_endpoint_url"
                                placeholder="https://&lt;account&gt;.r2.cloudflarestorage.com"/>
+                    </setting>
+                    <setting string="Public Endpoint URL"
+                             help="Host used to sign presigned URLs when it differs from the internal endpoint. Empty = use the endpoint above."
+                             invisible="not odusite_s3_enabled">
+                        <field name="odusite_s3_public_endpoint_url"
+                               placeholder="https://files.example.com"/>
                     </setting>
                     <setting string="Region" help="Use 'auto' for Cloudflare R2."
                              invisible="not odusite_s3_enabled">
@@ -35,15 +51,86 @@
                              invisible="not odusite_s3_enabled">
                         <field name="odusite_s3_public_base_url" placeholder="https://media.example.com"/>
                     </setting>
-                    <setting string="Presigned URL Expiry (s)"
-                             help="Lifetime of presigned GET URLs for private documents."
-                             invisible="not odusite_s3_enabled">
-                        <field name="odusite_s3_url_expiry"/>
-                    </setting>
                     <setting string="Connection" help="Write and delete a probe object to validate the credentials."
                              invisible="not odusite_s3_enabled">
                         <button name="action_odusite_s3_test_connection" type="object"
                                 string="Test connection" class="btn-secondary"/>
+                    </setting>
+
+                    <setting string="Keep web assets (CSS/JS) in Odoo"
+                             help="Serve CSS/JS bundles from Odoo. Everything else goes to S3."
+                             invisible="not odusite_s3_enabled">
+                        <field name="odusite_s3_keep_assets_local"/>
+                    </setting>
+                    <setting string="Keep small images in Odoo"
+                             help="Images below this size stay local (avatars, thumbnails). 0 = send all images to S3."
+                             invisible="not odusite_s3_enabled">
+                        <field name="odusite_s3_keep_images_below_kb" class="o_light_label"/> KB
+                    </setting>
+                    <setting string="Also keep these MIME types in Odoo"
+                             help="Advanced. Comma-separated MIME prefixes, e.g. application/xml, text/. Leave empty if unsure."
+                             invisible="not odusite_s3_enabled">
+                        <field name="odusite_s3_keep_local_mimetypes"/>
+                    </setting>
+
+                    <setting string="Direct download via presigned URL"
+                             help="Redirect /web/content and /web/image (originals) to a short-lived presigned URL. Resized image variants keep being served by Odoo."
+                             invisible="not odusite_s3_enabled">
+                        <field name="odusite_s3_direct_download"/>
+                        <div class="content-group mt8" invisible="not odusite_s3_direct_download">
+                            <label for="odusite_s3_url_expiry" class="o_light_label"/>
+                            <field name="odusite_s3_url_expiry" class="o_light_label"/> seconds
+                        </div>
+                    </setting>
+
+                    <setting string="Migrate existing attachments to S3"
+                             help="Move attachments already in the local filestore to S3, in the background. Safe to stop and resume; files that stay in Odoo are skipped."
+                             invisible="not odusite_s3_enabled">
+                        <div>
+                            <strong>On S3:</strong>
+                            <field name="odusite_s3_migrated_count" readonly="1" class="oe_inline"/>
+                            &#160;|&#160;
+                            <strong>Local pending:</strong>
+                            <field name="odusite_s3_local_count" readonly="1" class="oe_inline"/>
+                            &#160;|&#160;
+                            <strong>Running:</strong>
+                            <field name="odusite_s3_migration_running" readonly="1" class="oe_inline"/>
+                        </div>
+                        <div class="mt8">
+                            <label for="odusite_s3_migrate_batch_size" class="o_light_label"/>
+                            <field name="odusite_s3_migrate_batch_size" class="o_light_label oe_inline"/>
+                            &#160;
+                            <label for="odusite_s3_migrate_workers" class="o_light_label"/>
+                            <field name="odusite_s3_migrate_workers" class="o_light_label oe_inline"/>
+                        </div>
+                        <div class="mt8">
+                            <span class="o_form_label">Allowed time window</span>
+                            <div class="text-muted">
+                                Run migration only between these hours (e.g. 2 → 6 for nightly).
+                                It stops when leaving the window and resumes next day. Set both
+                                equal to allow any time.
+                            </div>
+                            <div class="content-group mt4">
+                                <label for="odusite_s3_migrate_window_start" class="o_light_label"/>
+                                <field name="odusite_s3_migrate_window_start" class="o_light_label oe_inline"/>
+                                &#160;
+                                <label for="odusite_s3_migrate_window_end" class="o_light_label"/>
+                                <field name="odusite_s3_migrate_window_end" class="o_light_label oe_inline"/>
+                                &#160;
+                                <label for="odusite_s3_migrate_window_tz" class="o_light_label"/>
+                                <field name="odusite_s3_migrate_window_tz" class="o_light_label oe_inline" placeholder="Europe/Warsaw"/>
+                            </div>
+                        </div>
+                        <div class="mt8">
+                            <button name="action_odusite_s3_migrate_start" type="object"
+                                    string="Start migration" class="btn-primary"
+                                    invisible="odusite_s3_migration_running"/>
+                            <button name="action_odusite_s3_migrate_stop" type="object"
+                                    string="Stop migration" class="btn-secondary"
+                                    invisible="not odusite_s3_migration_running"/>
+                            <button name="action_odusite_s3_refresh" type="object"
+                                    string="Refresh" class="btn-link"/>
+                        </div>
                     </setting>
                 </block>
             </xpath>

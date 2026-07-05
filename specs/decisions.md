@@ -112,17 +112,31 @@ filestore. In Odoo every binary (product images, blog/event covers, generated
 PDFs, uploaded CVs/attachments) is an `ir.attachment`, which exposes clean
 `_storage/_file_read/_file_write/_file_delete` hooks.
 Decision: a new addon `odusite_s3` offloads the `ir.attachment` filestore to
-S3/R2 via those hooks (boto3). Offload is **selective**: content attachments go
-to S3; Odoo backend web-asset bundles (JS/CSS) stay in the local filestore so
-the admin UI is not slowed by per-request S3 reads. Private documents are
-downloaded via **presigned URLs** (Odoo generates a short-lived signed GET URL;
-the SSR worker hands it to the user). Public images use a **hybrid** delivery:
-the API exposes the direct R2/CDN URL of the original, and the `/img` proxy
-stays for on-the-fly resized variants (Odoo resizes once, edge-cached by
-`unique`; source bytes now come from R2). New attachments go to S3 immediately;
-existing filestore entries migrate lazily via a server action/cron, not
-automatically.
+S3/R2 via those hooks (boto3). It **adopts the production techniques of an
+internal reference module** (`s3_attachment`) rather than a naive first cut:
+- **`s3://` storage marker** in `store_fname` (not an `_storage()` override):
+  per-record, self-describing storage; local and S3 files coexist and reads
+  route on the prefix. The offload decision is taken in
+  `_get_datas_related_values` where mimetype **and** size are known.
+- **Selective** offload: content goes to S3; backend web-asset bundles (JS/CSS)
+  and small images stay local so the admin UI isn't slowed by per-request S3
+  reads; extra keep-local mimetype prefixes are configurable.
+- **Deferred, reference-counted GC**: `_file_delete` queues into an
+  `odusite.s3.gc` table in a separate cursor (survives rollback — object stores
+  aren't transactional); an autovacuum deletes an object only when no attachment
+  still references its key (dedup-safe).
+- **Throttled background migration** of the existing filestore: a threaded cron
+  (network I/O off the DB), keyset-paginated, with a tz-aware time window,
+  Start/Stop, concurrent-update retries, an unhealthy-source guard, and a direct
+  SQL `store_fname` swap that bypasses sibling modules' ORM write hooks.
+- **Presigned URLs** for private documents, plus an **`ir.http` 302 redirect**
+  of `/web/content` and `/web/image` originals straight to a presigned URL after
+  the standard access check (resize falls through to read-from-S3).
+- Public images use **hybrid** delivery: the API exposes the direct R2/CDN URL
+  of the original; the `/img` proxy stays for on-the-fly resized variants.
+- **Secrets from `odoo.conf`/env first**, DB params as a fallback (UI stays
+  usable for testing; production can keep credentials out of the DB).
 Consequences: media/documents scale independently of Odoo; bandwidth leaves
 Odoo/worker for public originals and private downloads; requires boto3
-(ADR-008) and R2/S3 credentials configured in Odoo settings. Complements — does
-not replace — ADR-009 (`/img` proxy remains for resizing).
+(ADR-008) and R2/S3 credentials configured in conf/env or Odoo settings.
+Complements — does not replace — ADR-009 (`/img` proxy remains for resizing).

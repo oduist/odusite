@@ -12,15 +12,14 @@ from odoo.tests.common import TransactionCase, tagged
 
 from odoo.addons.odusite_base.lib import serializers
 
-S3_ENDPOINT = 'http://oduflow-svc-minio:9090'
+S3_ENDPOINT = 'http://oduflow-1-svc-minio:9090'
 S3_BUCKET = 'odusite-media'
 S3_REGION = 'us-east-1'
 S3_KEY = 'test'
 
-# 1x1 transparent PNG (valid image for res.partner.image_1920)
+# A valid 1x1 PNG (base64), accepted by res.partner.image_1920 image processing.
 PNG_1PX = (
-    b'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk'
-    b'+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+    b'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC'
 )
 
 
@@ -69,6 +68,9 @@ class TestS3Storage(TransactionCase):
         icp.set_param('odusite.s3.access_key', S3_KEY)
         icp.set_param('odusite.s3.secret_key', S3_KEY)
         icp.set_param('odusite.s3.url_expiry', '900')
+        # offload every image (the test fixtures are tiny 1px PNGs that the
+        # default "keep small images local" rule would otherwise keep on disk)
+        icp.set_param('odusite.s3.keep_images_below_kb', '0')
         # drop any cached boto3 client so the mock config is picked up
         if hasattr(cls.env.registry, '_odusite_s3_client'):
             del cls.env.registry._odusite_s3_client
@@ -89,20 +91,19 @@ class TestS3Storage(TransactionCase):
             'raw': payload,
             'mimetype': 'application/octet-stream',
         })
-        # routed to S3
-        self.assertEqual(att._storage(), 'odusite_s3')
+        # routed to S3: recorded as an s3:// store_fname (no _storage override)
         key = att.store_fname
-        self.assertTrue(key)
+        self.assertTrue(att._odusite_s3_is_s3(key))
         # object physically present in the bucket with the exact bytes
-        self.assertEqual(self._object_bytes(key), payload)
+        obj_key = att._odusite_s3_object_key(key)
+        self.assertEqual(self._object_bytes(obj_key), payload)
         # _file_read returns the same bytes (force a re-read from the backend)
         att.invalidate_recordset(['raw'])
         self.assertEqual(att._file_read(key), payload)
         self.assertEqual(att.raw, payload)
-        # delete -> object gone from S3
-        att.unlink()
-        with self.assertRaises(self.ClientError):
-            self.s3_client.get_object(Bucket=S3_BUCKET, Key=key)
+        # Deletion is deferred + ref-counted; the actual sweep is covered by the
+        # dedicated GC tests below (a real unlink marks the object in a separate
+        # cursor whose committed row is invisible to this snapshot transaction).
 
     def test_dedup_same_checksum_single_object(self):
         payload = b'odusite-dedup-' + uuid.uuid4().hex.encode()
@@ -110,10 +111,30 @@ class TestS3Storage(TransactionCase):
                                      'mimetype': 'application/octet-stream'})
         b = self.Attachment.create({'name': 'b.bin', 'raw': payload,
                                     'mimetype': 'application/octet-stream'})
+        # identical content -> one key -> a single object in the bucket
         self.assertEqual(a.store_fname, b.store_fname)
-        # deleting one keeps the shared object (still referenced by the other)
-        a.unlink()
-        self.assertEqual(self._object_bytes(b.store_fname), payload)
+        self.assertEqual(self._object_bytes(a._odusite_s3_object_key(a.store_fname)),
+                         payload)
+
+    def test_gc_removes_unreferenced_object(self):
+        # an orphan object (no ir.attachment references it) queued for GC -> gone
+        key = 'gc/%s' % uuid.uuid4().hex
+        fname = 's3://' + key
+        self.s3_client.put_object(Bucket=S3_BUCKET, Key=key, Body=b'orphan')
+        self.env['odusite.s3.gc'].create({'store_fname': fname})
+        self.Attachment._gc_odusite_s3_collect()
+        with self.assertRaises(self.ClientError):
+            self.s3_client.get_object(Bucket=S3_BUCKET, Key=key)
+
+    def test_gc_keeps_referenced_object(self):
+        # a still-referenced object must survive the sweep (dedup guard)
+        payload = b'referenced-' + uuid.uuid4().hex.encode()
+        att = self.Attachment.create({'name': 'ref.bin', 'raw': payload,
+                                      'mimetype': 'application/octet-stream'})
+        self.env['odusite.s3.gc'].create({'store_fname': att.store_fname})
+        self.Attachment._gc_odusite_s3_collect()
+        self.assertEqual(self._object_bytes(att._odusite_s3_object_key(att.store_fname)),
+                         payload)
 
     def test_presigned_url(self):
         att = self.Attachment.create({
@@ -136,7 +157,7 @@ class TestS3Storage(TransactionCase):
             'public': True,
             'raw': b'body{color:red}',
         })
-        self.assertNotEqual(asset._storage(), 'odusite_s3')
+        self.assertFalse(asset._odusite_s3_is_s3(asset.store_fname))
         with self.assertRaises(UserError):
             asset._odusite_presigned_url()
 
@@ -154,15 +175,16 @@ class TestS3Storage(TransactionCase):
             ('res_field', '=', 'image_1920'),
         ], limit=1)
         self.assertTrue(att, "image_1920 attachment should exist")
-        self.assertEqual(att._storage(), 'odusite_s3')
+        self.assertTrue(att._odusite_s3_is_s3(att.store_fname))
         att.public = True
 
         result = serializers.public_asset(partner, 'image_1920')
         self.assertTrue(result['proxy'].startswith('/web/image'),
                         "proxy should be a /web/image URL, got %r" % result['proxy'])
+        # the public URL uses the object key (store_fname minus the s3:// marker)
+        obj_key = att._odusite_s3_object_key(att.store_fname)
         self.assertEqual(result['original'],
-                         'https://media.example.com/%s' % att.store_fname)
-        self.assertTrue(result['original'].startswith('https://media.example.com/'))
+                         'https://media.example.com/%s' % obj_key)
 
     def test_public_url_none_without_public_base(self):
         icp = self.env['ir.config_parameter'].sudo()
