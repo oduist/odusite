@@ -1,0 +1,104 @@
+site_name: Odusite
+site_description: Odoo 19 as a headless CMS with a modular, themable Astro frontend on Cloudflare Workers
+site_author: Oduist
+copyright: Copyright &copy; Oduist — Odusite
+repo_url: https://github.com/oduist/odusite
+repo_name: oduist/odusite
+
+# The Astro frontend lives in ./site, so the MkDocs build must not write there.
+site_dir: _site
+docs_dir: docs
+
+theme:
+  name: material
+  icon:
+    logo: material/web
+    repo: fontawesome/brands/github
+  font:
+    text: Inter
+    code: JetBrains Mono
+  palette:
+    # Dark mode is the default (matches the site's default dark theme)
+    - scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-night
+        name: Switch to light mode
+    - scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to dark mode
+  features:
+    - navigation.instant
+    - navigation.instant.progress
+    - navigation.tracking
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+
+plugins:
+  - search
+  - glightbox
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - def_list
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - toc:
+      permalink: true
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/oduist/odusite
+      name: Odusite on GitHub
+
+extra_css:
+  - css/custom.css
+
+nav:
+  - Home: index.md
+  - Overview:
+      - Architecture: architecture.md
+  - User Guide:
+      - Introduction: user/README.md
+      - Account & Sign-up: user/account.md
+      - Shopping: user/shopping.md
+      - Customer Portal: user/portal.md
+      - Community: user/community.md
+      - Voice Assistant: user/voice-assistant.md
+  - Administration:
+      - Introduction: admin/README.md
+      - Installation: admin/installation.md
+      - Configuration: admin/configuration.md
+      - Site Blocks: admin/blocks.md
+      - Payments: admin/payments.md
+      - S3 / R2 Storage: admin/s3.md
+      - Site Deployment: admin/site-deploy.md
+      - Voice Assistant: admin/voice-assistant.md
