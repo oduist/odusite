@@ -154,6 +154,15 @@ Access, so `CF_ACCESS_*` stay unset. Notes specific to this host:
 - `odusite_s3` needs `boto3` in the container (`pip install boto3`); reinstall it
   if the container is ever recreated.
 
+> **Same-zone caveat (important).** Put the site Worker's custom domain and the
+> Odoo origin (`ODOO_URL`) on **different Cloudflare zones**. A Worker served
+> from a custom domain on zone *X* cannot reliably `fetch()` an origin hostname
+> that is also on zone *X* — the server-to-server request loops back into the
+> zone and pages that read Odoo return 404/empty. The reference demo runs the
+> Odoo backend on `odusite.team.dev.oduist.com` (zone `oduist.com`) and therefore
+> serves the site from `odusite.oduflow.dev` (zone `oduflow.dev`), not from a
+> second `oduist.com` hostname.
+
 ### Hardening
 
 `X-Odusite-Token` is mandatory and is the baseline protection, but the origin is

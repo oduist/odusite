@@ -106,7 +106,12 @@ export const onRequest = defineMiddleware(async (context, next) => {
   //    s-maxage + X-Odusite-Tags headers (see lib/cache.ts).
   const isPrivate = /^\/(portal|cart|checkout|login|signup|reset|confirm)/.test(activePath);
   const anonymous = !access && !getRefreshToken(context) && !cookies.get(COOKIES.cart)?.value;
-  const cacheable = context.request.method === 'GET' && !isPrivate && anonymous;
+  // Never route NON_PAGE requests (the /img and /api proxies, assets) through the
+  // page cache: they set their own caching, and sharing the page-cache keyspace
+  // lets a query string (e.g. an image `?unique=` checksum) collide with a
+  // stored page entry.
+  const cacheable =
+    context.request.method === 'GET' && !isPrivate && anonymous && !NON_PAGE.test(url.pathname);
 
   if (cacheable) {
     const hit = await matchPage(context);
