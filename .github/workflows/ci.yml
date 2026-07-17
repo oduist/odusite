@@ -29,6 +29,11 @@ jobs:
           --health-retries 10
     steps:
       - uses: actions/checkout@v4
+      - name: Install Python external dependencies declared by addons
+        # e.g. odusite_s3 requires boto3; the odoo:19.0 image ships without it,
+        # so the module would fail to install. Debian's system Python is
+        # externally managed (PEP 668), hence --break-system-packages.
+        run: python3 -m pip install --break-system-packages boto3
       - name: Install odusite addons and run their tests
         run: |
           MODULES=$(ls addons | paste -sd, -)
