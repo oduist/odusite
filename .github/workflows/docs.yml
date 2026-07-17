@@ -38,4 +38,4 @@ jobs:
           cache-dependency-path: requirements-docs.txt
       - run: pip install -r requirements-docs.txt
       # Builds (with --strict) into _site and force-pushes it to gh-pages.
-      - run: mkdocs gh-deploy --force --strict --branch gh-pages
+      - run: mkdocs gh-deploy --force --strict --remote-branch gh-pages
