@@ -4,7 +4,7 @@ The browser never talks to Odoo. Only the site's Cloudflare Worker calls Odoo's
 REST API (`/odusite/v1/...`) and the image endpoint (`/web/image/...`),
 server-to-server, over `ODOO_URL`. Every `/odusite/*` request carries
 `X-Odusite-Token` and is rejected with 401 without it (constant-time compared;
-see [ADR-002](../../specs/decisions.md)).
+see [ADR-002](https://github.com/oduist/odusite/blob/main/specs/decisions.md)).
 
 Two topologies are supported. They differ only in **how the Worker reaches
 Odoo** and how Odoo is exposed to the network:
