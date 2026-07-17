@@ -9,7 +9,12 @@ jobs:
   addons:
     name: Odoo addon tests
     runs-on: ubuntu-latest
-    container: odoo:19.0
+    container:
+      image: odoo:19.0
+      # Run as root so Node-based actions (checkout) can write the runner's
+      # root-owned /__w/_temp files; the odoo:19.0 image otherwise runs as the
+      # unprivileged "odoo" user. Odoo only warns when started as root.
+      options: --user root
     services:
       postgres:
         image: postgres:16

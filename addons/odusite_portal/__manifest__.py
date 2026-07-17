@@ -13,8 +13,8 @@ Odusite portal core (see specs/03-auth.md and specs/modules/odusite_portal.md):
 """,
     'category': 'Website',
     'version': '19.0.1.0.0',
-    'author': 'Odusite',
-    'license': 'LGPL-3',
+    'author': 'Oduist OÜ',
+    'license': 'MIT',
     'depends': ['odusite_base', 'portal', 'auth_signup'],
     'data': [
         'security/ir.model.access.csv',

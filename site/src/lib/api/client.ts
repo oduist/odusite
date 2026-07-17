@@ -1,7 +1,7 @@
 // Typed Odoo API client. Server-side only — the token must never reach the
 // browser. Browser islands call same-origin /api/* endpoints instead.
 import type { APIContext, AstroGlobal } from 'astro';
-import { getEnv } from '../env';
+import { getEnv, odooAccessHeaders } from '../env';
 import { getAccessToken, getCartBinding } from '../auth/session';
 
 export class OdusiteApiError extends Error {
@@ -58,6 +58,7 @@ export async function apiFetch<T = unknown>(
   const headers: Record<string, string> = {
     'X-Odusite-Token': env.ODUSITE_TOKEN,
     'Content-Type': 'application/json',
+    ...odooAccessHeaders(env),
   };
   if (options.auth !== false) {
     const token = getAccessToken(ctx);

@@ -8,9 +8,12 @@ installation, configuration and operations.
 
 - [installation.md](installation.md) — Odoo addons: install and initial setup
 - [site-deploy.md](site-deploy.md) — Astro site: build, Cloudflare deploy, env vars
+- [topologies.md](topologies.md) — how the Worker reaches Odoo: Cloudflare Tunnel vs public origin
 - [configuration.md](configuration.md) — Odoo settings, tokens, webhooks, languages
 - [payments.md](payments.md) — payment providers (Stripe first)
 - [blocks.md](blocks.md) — enabling/disabling site blocks and what each requires
+- [voice-assistant.md](voice-assistant.md) — optional ElevenLabs voice navigation
+- [s3.md](s3.md) — offloading the attachment filestore to S3 / Cloudflare R2
 
 ## Architecture in one paragraph
 

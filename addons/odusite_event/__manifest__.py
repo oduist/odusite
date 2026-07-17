@@ -11,8 +11,8 @@ Odusite API for events (website_event):
 """,
     'category': 'Website',
     'version': '19.0.1.0.0',
-    'author': 'Odusite',
-    'license': 'LGPL-3',
+    'author': 'Oduist OÜ',
+    'license': 'MIT',
     'depends': ['odusite_base', 'website_event'],
     'installable': True,
 }

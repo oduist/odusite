@@ -12,6 +12,11 @@ export interface OdusiteEnv {
   PUBLIC_TURNSTILE_SITE_KEY?: string;
   ELEVENLABS_API_KEY?: string;
   ELEVENLABS_AGENT_ID?: string;
+  // Optional Cloudflare Access service token, sent to Odoo when its Tunnel
+  // hostname (or public origin) is locked down behind Access. See
+  // docs/admin/topologies.md.
+  CF_ACCESS_CLIENT_ID?: string;
+  CF_ACCESS_CLIENT_SECRET?: string;
   ODUSITE_CACHE_TAGS?: KVNamespace;
 }
 
@@ -32,6 +37,25 @@ export function getEnv(ctx: Ctx): OdusiteEnv {
       cf.PUBLIC_TURNSTILE_SITE_KEY ?? import.meta.env.PUBLIC_TURNSTILE_SITE_KEY,
     ELEVENLABS_API_KEY: cf.ELEVENLABS_API_KEY ?? import.meta.env.ELEVENLABS_API_KEY,
     ELEVENLABS_AGENT_ID: cf.ELEVENLABS_AGENT_ID ?? import.meta.env.ELEVENLABS_AGENT_ID,
+    CF_ACCESS_CLIENT_ID: cf.CF_ACCESS_CLIENT_ID ?? import.meta.env.CF_ACCESS_CLIENT_ID,
+    CF_ACCESS_CLIENT_SECRET:
+      cf.CF_ACCESS_CLIENT_SECRET ?? import.meta.env.CF_ACCESS_CLIENT_SECRET,
     ODUSITE_CACHE_TAGS: cf.ODUSITE_CACHE_TAGS,
   };
+}
+
+/**
+ * Cloudflare Access service-token headers for reaching Odoo through a
+ * locked-down Tunnel hostname (or public origin) behind Access. Server-side
+ * only — never returned to the browser. Empty object when not configured, so
+ * spreading it is a no-op in the default (open origin) setup.
+ */
+export function odooAccessHeaders(env: OdusiteEnv): Record<string, string> {
+  if (env.CF_ACCESS_CLIENT_ID && env.CF_ACCESS_CLIENT_SECRET) {
+    return {
+      'CF-Access-Client-Id': env.CF_ACCESS_CLIENT_ID,
+      'CF-Access-Client-Secret': env.CF_ACCESS_CLIENT_SECRET,
+    };
+  }
+  return {};
 }

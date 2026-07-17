@@ -14,8 +14,8 @@ Odusite API for eLearning (website_slides):
 """,
     'category': 'Website',
     'version': '19.0.1.0.0',
-    'author': 'Odusite',
-    'license': 'LGPL-3',
+    'author': 'Oduist OÜ',
+    'license': 'MIT',
     'depends': ['odusite_base', 'odusite_portal', 'website_slides'],
     'installable': True,
 }

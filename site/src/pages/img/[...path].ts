@@ -1,6 +1,6 @@
 // Image proxy: /img/** -> Odoo /web/image/** with edge caching (ADR-009).
 import type { APIRoute } from 'astro';
-import { getEnv } from '@lib/env';
+import { getEnv, odooAccessHeaders } from '@lib/env';
 
 export const prerender = false;
 
@@ -16,7 +16,10 @@ export const GET: APIRoute = async (context) => {
   if (hit) return hit;
 
   const response = await fetch(upstream, {
-    headers: { Accept: context.request.headers.get('Accept') ?? 'image/*' },
+    headers: {
+      Accept: context.request.headers.get('Accept') ?? 'image/*',
+      ...odooAccessHeaders(env),
+    },
   });
   if (!response.ok) {
     return new Response(null, { status: response.status });
