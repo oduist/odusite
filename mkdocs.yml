@@ -97,6 +97,7 @@ nav:
       - Introduction: admin/README.md
       - Installation: admin/installation.md
       - Configuration: admin/configuration.md
+      - Deployment Topologies: admin/topologies.md
       - Site Blocks: admin/blocks.md
       - Payments: admin/payments.md
       - S3 / R2 Storage: admin/s3.md
