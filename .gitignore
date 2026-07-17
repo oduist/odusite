@@ -11,3 +11,6 @@ site/.wrangler/
 # Local secrets
 site/.dev.vars
 .env
+
+# MkDocs build output
+_site/
