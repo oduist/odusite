@@ -33,6 +33,9 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
+          # Docs deps live in requirements-docs.txt, not the default
+          # requirements.txt/pyproject.toml the pip cache looks for.
+          cache-dependency-path: requirements-docs.txt
       - run: pip install -r requirements-docs.txt
       # Builds (with --strict) into _site and force-pushes it to gh-pages.
       - run: mkdocs gh-deploy --force --strict --branch gh-pages
