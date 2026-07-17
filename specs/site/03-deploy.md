@@ -27,9 +27,15 @@ Build-time (CI env): `ODUSITE_BLOCK_*`, `ODUSITE_THEME`.
 
 ## Environments
 
-`preview` (staging Odoo, test PSP keys) and `production` — separate wrangler
-environments, separate tokens. CI: typecheck (`astro check`) + build must pass;
-deploy `preview` on PR, `production` on main.
+**Implemented:** a single `production` Worker. The `Deploy site` GitHub Actions
+workflow (`.github/workflows/deploy-site.yml`) builds and runs `wrangler deploy`
+on every push to `main` under `site/**` (plus `workflow_dispatch`), authed with
+repo secrets `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID`. The `ci.yml`
+`site` job still gates PRs with typecheck (`astro check`) + build. See
+[ADR-014](../decisions.md) and [site-deploy.md](../../docs/admin/site-deploy.md).
+
+**Deferred:** a separate `preview` environment (staging Odoo, test PSP keys,
+its own tokens) deployed on PRs — not yet wired into `wrangler.jsonc`/CI.
 
 ## Caching policy
 

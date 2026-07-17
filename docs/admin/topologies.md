@@ -135,6 +135,25 @@ Browser ─HTTPS─▶ Cloudflare Worker ─HTTPS─▶ https://odoo.example.com
    the Worker; keep `/web/*` (the admin backend) restricted to a VPN/allowlist.
 2. Set `ODOO_URL=https://odoo.example.com` in `site/wrangler.jsonc`.
 
+### Example: Odoo hosted on Oduflow
+
+The reference backend runs as a persistent [Oduflow](https://oduist.com)
+environment named `odusite` (repo `oduist/odusite`, branch `main`,
+`odoo:19.0`), reachable at a public HTTPS origin such as
+`https://odusite.team.dev.oduist.com` — i.e. plain topology B, no Cloudflare
+Access, so `CF_ACCESS_*` stay unset. Notes specific to this host:
+
+- Set `ODOO_URL` to that origin in `site/wrangler.jsonc`; set the Odoo
+  `web.base.url` / `odusite.site_url` back to the Worker URL so links and the
+  revalidate webhook resolve correctly.
+- Addon updates land by pushing to `main` and running Oduflow `pull_and_apply`
+  (install/upgrade as needed).
+- Mark the environment **protected** so Oduflow's idle auto-stop (48 h) /
+  auto-delete does not reap it — serving HTTP traffic does not reset that timer;
+  only Oduflow tool calls do.
+- `odusite_s3` needs `boto3` in the container (`pip install boto3`); reinstall it
+  if the container is ever recreated.
+
 ### Hardening
 
 `X-Odusite-Token` is mandatory and is the baseline protection, but the origin is

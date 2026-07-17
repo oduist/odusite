@@ -163,3 +163,31 @@ topology; the tunnel removes the public origin without touching frontend code;
 the CF Access headers are additive and never reach the browser (server-side
 Worker only). Odoo must run with `--proxy-mode`; keep `/web/*` (admin) off the
 public internet.
+
+## ADR-014 — CI/CD: GitHub Actions deploys the site; Odoo backend hosted on Oduflow
+Context: the two halves deploy on different substrates — the Astro site runs on
+Cloudflare Workers, the Odoo backend is a long-lived instance the site reads
+over `ODOO_URL` (ADR-002/ADR-013). Deploying the site by hand (`pnpm deploy`)
+does not scale and drifts from `main`.
+Decision:
+- **Site** — a `Deploy site` GitHub Actions workflow
+  (`.github/workflows/deploy-site.yml`) builds and runs `wrangler deploy` to the
+  **production** Worker on every push to `main` under `site/**` (plus manual
+  `workflow_dispatch`). Auth is repo secrets `CLOUDFLARE_API_TOKEN` /
+  `CLOUDFLARE_ACCOUNT_ID`; runtime Worker secrets (`ODUSITE_TOKEN`,
+  `ODUSITE_REVALIDATE_SECRET`, …) are set once with `wrangler secret put` and
+  persist across deploys, so CI never handles them. A separate PR-time `preview`
+  environment (`specs/site/03-deploy.md`) is deferred.
+- **Odoo backend** — hosted as a persistent Oduflow environment (topology B, a
+  public HTTPS origin reachable by the Worker; no Cloudflare Access). The
+  environment tracks `main` and receives addon updates via Oduflow
+  `pull_and_apply`; it must be marked *protected* so Oduflow's idle auto-stop /
+  auto-delete does not reap it (HTTP traffic alone does not reset that timer).
+Consequences: merging to `main` publishes the site automatically; the KV id and
+vars (`ODOO_URL`, `PUBLIC_SITE_URL`) live in `site/wrangler.jsonc` under version
+control; the Odoo host URL is an operational input (its `web.base.url` /
+`odusite.site_url` point back at the Worker for correct links and revalidate
+webhooks). Odoo addon manifests must use a `license` value Odoo accepts (Odoo's
+`ir.module.module.license` selection has no `MIT`; MIT-licensed addons declare
+`Other OSI approved licence`) or they fail to register on stricter `odoo:19.0`
+builds.
