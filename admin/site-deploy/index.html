@@ -20,7 +20,7 @@
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
@@ -28,7 +28,7 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
       
         
         <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
@@ -968,6 +968,34 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Deploy">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#manual" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Manual
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#automatic-github-actions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Automatic (GitHub Actions)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1104,6 +1132,34 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Deploy">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#manual" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Manual
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#automatic-github-actions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Automatic (GitHub Actions)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1187,10 +1243,35 @@ sends them on every Odoo request. Left unset, they are omitted. See
 A block only works when its Odoo addon is installed (see
 <a href="../installation/">installation.md</a>); otherwise its pages return errors.</p>
 <h2 id="deploy">Deploy<a class="headerlink" href="#deploy" title="Permanent link">¶</a></h2>
+<h3 id="manual">Manual<a class="headerlink" href="#manual" title="Permanent link">¶</a></h3>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>pnpm<span class="w"> </span>deploy<span class="w">        </span><span class="c1"># astro build &amp;&amp; wrangler deploy</span>
 </span></code></pre></div>
 <p>Attach a custom domain to the Worker in the Cloudflare dashboard, then set the
-same URL as <strong>Site URL</strong> in Odoo settings.</p>
+same URL as <strong>Site URL</strong> in Odoo settings (<code>web.base.url</code> / <code>odusite.site_url</code>).</p>
+<h3 id="automatic-github-actions">Automatic (GitHub Actions)<a class="headerlink" href="#automatic-github-actions" title="Permanent link">¶</a></h3>
+<p>The <code>Deploy site</code> workflow (<code>.github/workflows/deploy-site.yml</code>) builds and
+deploys the <strong>production</strong> Worker on every push to <code>main</code> that touches <code>site/**</code>
+(and on manual <strong>Run workflow</strong> / <code>workflow_dispatch</code>). It runs the same
+<code>pnpm install → pnpm build → wrangler deploy</code> steps as above.</p>
+<p>One-time setup — add two repository secrets under
+<strong>Settings → Secrets and variables → Actions</strong>:</p>
+<ul>
+<li><code>CLOUDFLARE_API_TOKEN</code> — a Cloudflare API token with <strong>Workers Scripts: Edit</strong>,
+  <strong>Workers KV Storage: Edit</strong> and <strong>Account: Read</strong> (dashboard →
+  My Profile → API Tokens).</li>
+<li><code>CLOUDFLARE_ACCOUNT_ID</code> — your Cloudflare account id.</li>
+</ul>
+<p>The workflow does <strong>not</strong> manage Worker secrets or vars: <code>ODUSITE_TOKEN</code>,
+<code>ODUSITE_REVALIDATE_SECRET</code> (and optional ones) are set once with
+<code>wrangler secret put</code> and persist across deploys; <code>ODOO_URL</code> / <code>PUBLIC_SITE_URL</code>
+and the KV binding are committed in <code>wrangler.jsonc</code>. Change those with a normal
+commit (they redeploy on the next push to <code>main</code>).</p>
+<blockquote>
+<p>The Cloudflare adapter output (<code>dist/_worker.js</code>, <code>dist/_routes.json</code>) is kept
+out of the public asset upload by <code>site/public/.assetsignore</code>, which Astro
+copies into <code>dist/</code> on every build. Do not delete it or <code>wrangler deploy</code>
+fails with an "Uploading a Pages _worker.js directory as an asset" error.</p>
+</blockquote>
 <h2 id="local-development">Local development<a class="headerlink" href="#local-development" title="Permanent link">¶</a></h2>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>pnpm<span class="w"> </span>dev<span class="w">           </span><span class="c1"># Astro dev server with Cloudflare platform proxy</span>
 </span></code></pre></div>
@@ -1324,7 +1405,7 @@ same URL as <strong>Site URL</strong> in Odoo settings.</p>
       <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.instant.progress", "navigation.tracking", "navigation.sections", "navigation.top", "navigation.footer", "toc.follow", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.code.annotate", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
       
     
   

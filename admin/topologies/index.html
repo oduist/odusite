@@ -20,7 +20,7 @@
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
@@ -28,7 +28,7 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
       
         
         <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
@@ -888,6 +888,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#example-odoo-hosted-on-oduflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Example: Odoo hosted on Oduflow
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#hardening" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1170,6 +1181,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#example-odoo-hosted-on-oduflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Example: Odoo hosted on Oduflow
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#hardening" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1335,6 +1357,24 @@ Odoo.sh, a cloud VPS behind Nginx/Caddy) and you do not want to run
    the Worker; keep <code>/web/*</code> (the admin backend) restricted to a VPN/allowlist.</li>
 <li>Set <code>ODOO_URL=https://odoo.example.com</code> in <code>site/wrangler.jsonc</code>.</li>
 </ol>
+<h3 id="example-odoo-hosted-on-oduflow">Example: Odoo hosted on Oduflow<a class="headerlink" href="#example-odoo-hosted-on-oduflow" title="Permanent link">¶</a></h3>
+<p>The reference backend runs as a persistent <a href="https://oduist.com">Oduflow</a>
+environment named <code>odusite</code> (repo <code>oduist/odusite</code>, branch <code>main</code>,
+<code>odoo:19.0</code>), reachable at a public HTTPS origin such as
+<code>https://odusite.team.dev.oduist.com</code> — i.e. plain topology B, no Cloudflare
+Access, so <code>CF_ACCESS_*</code> stay unset. Notes specific to this host:</p>
+<ul>
+<li>Set <code>ODOO_URL</code> to that origin in <code>site/wrangler.jsonc</code>; set the Odoo
+  <code>web.base.url</code> / <code>odusite.site_url</code> back to the Worker URL so links and the
+  revalidate webhook resolve correctly.</li>
+<li>Addon updates land by pushing to <code>main</code> and running Oduflow <code>pull_and_apply</code>
+  (install/upgrade as needed).</li>
+<li>Mark the environment <strong>protected</strong> so Oduflow's idle auto-stop (48 h) /
+  auto-delete does not reap it — serving HTTP traffic does not reset that timer;
+  only Oduflow tool calls do.</li>
+<li><code>odusite_s3</code> needs <code>boto3</code> in the container (<code>pip install boto3</code>); reinstall it
+  if the container is ever recreated.</li>
+</ul>
 <h3 id="hardening">Hardening<a class="headerlink" href="#hardening" title="Permanent link">¶</a></h3>
 <p><code>X-Odusite-Token</code> is mandatory and is the baseline protection, but the origin is
 now publicly reachable, so add at least one edge control. Options, in rough
@@ -1514,7 +1554,7 @@ routes.</p>
       <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.instant.progress", "navigation.tracking", "navigation.sections", "navigation.top", "navigation.footer", "toc.follow", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.code.annotate", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
       
     
   
