@@ -13,8 +13,8 @@ Portal projects and tasks for the Odusite frontend
 """,
     'category': 'Website',
     'version': '19.0.1.0.0',
-    'author': 'Odusite',
-    'license': 'LGPL-3',
+    'author': 'Oduist OÜ',
+    'license': 'MIT',
     'depends': ['odusite_base', 'odusite_portal', 'project'],
     'installable': True,
 }

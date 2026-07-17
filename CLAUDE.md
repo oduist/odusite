@@ -50,7 +50,7 @@ docs/user/       End-user documentation — English.
 
 ### Odoo addons (`addons/`)
 - Target Odoo 19.0, Python ≥ 3.10. Follow Odoo coding guidelines (module structure,
-  `_inherit`, no monkey-patching). License: LGPL-3, `'author': 'Odusite'`.
+  `_inherit`, no monkey-patching). License: MIT, `'author': 'Oduist OÜ'`.
 - Naming: `odusite_<odoo module it builds on>` (e.g. `odusite_sale` extends `sale` /
   `website_sale`). Everything shared (token check, JSON envelope, pagination, image
   URLs, webhooks) lives in `odusite_base` — never duplicate it.
@@ -116,9 +116,11 @@ docs/user/       End-user documentation — English.
 | Var | Where | Purpose |
 |---|---|---|
 | `ODUSITE_TOKEN` | Odoo (system param `odusite.token`) + site secret | server-to-server auth, sent as `X-Odusite-Token` |
-| `ODOO_URL` | site | base URL of the Odoo instance |
+| `ODOO_URL` | site | base URL of the Odoo instance (Tunnel hostname or public origin) |
+| `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` | site | optional Cloudflare Access service token, sent to Odoo when its origin is behind Access (see `docs/admin/topologies.md`) |
 | `ODUSITE_JWT_SECRET` | Odoo (system param `odusite.jwt_secret`) | HS256 signing key, auto-generated |
 | `ODUSITE_BLOCK_*` | site build | enable/disable blocks (`1`/`0`) |
 | `ODUSITE_THEME` | site build | theme name (default: `default`) |
 | `STRIPE_PUBLISHABLE_KEY` | site | Stripe Elements (public) |
 | `ODUSITE_REVALIDATE_SECRET` | site + Odoo webhook | HMAC secret for cache-invalidation webhooks |
+| `ELEVENLABS_API_KEY` / `ELEVENLABS_AGENT_ID` | site | optional ElevenLabs voice-navigation agent; unset ⇒ feature ships no JS (see `docs/admin/voice-assistant.md`) |

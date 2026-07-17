@@ -12,8 +12,8 @@ Core of the Odusite headless integration:
 """,
     'category': 'Website',
     'version': '19.0.1.0.0',
-    'author': 'Odusite',
-    'license': 'LGPL-3',
+    'author': 'Oduist OÜ',
+    'license': 'MIT',
     'depends': ['website'],
     'data': [
         'security/ir.model.access.csv',

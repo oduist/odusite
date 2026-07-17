@@ -140,3 +140,26 @@ Consequences: media/documents scale independently of Odoo; bandwidth leaves
 Odoo/worker for public originals and private downloads; requires boto3
 (ADR-008) and R2/S3 credentials configured in conf/env or Odoo settings.
 Complements — does not replace — ADR-009 (`/img` proxy remains for resizing).
+
+## ADR-013 — Odoo origin exposure: Tunnel-first, optional CF Access service token
+Context: the Worker reaches Odoo server-to-server over `ODOO_URL` (ADR-002).
+How Odoo is exposed to the network is a deployment choice, but it decides the
+attack surface: a self-hosted Odoo should keep no public ports, while a managed
+Odoo already has a public URL.
+Decision: support two topologies with the same Worker code (see
+`docs/admin/topologies.md`):
+- **A (recommended)** — Odoo private behind a **Cloudflare Tunnel**
+  (`cloudflared`, outbound-only); `ODOO_URL` is the tunnel hostname; no public
+  origin/IP.
+- **B** — a **public Odoo origin**; `ODOO_URL` is that URL; edge lockdown
+  (Access/WAF/mTLS) is the operator's responsibility.
+Both may put the origin behind **Cloudflare Access** with a service token; the
+Worker sends `CF-Access-Client-Id`/`CF-Access-Client-Secret` (env
+`CF_ACCESS_CLIENT_ID`/`CF_ACCESS_CLIENT_SECRET`) on every API and `/img`
+request when configured, and omits them otherwise (no-op default). Layered auth:
+Access at the edge → `X-Odusite-Token` at Odoo → record rules/JWT for data.
+Consequences: `X-Odusite-Token` stays the mandatory app-level gate in every
+topology; the tunnel removes the public origin without touching frontend code;
+the CF Access headers are additive and never reach the browser (server-side
+Worker only). Odoo must run with `--proxy-mode`; keep `/web/*` (admin) off the
+public internet.

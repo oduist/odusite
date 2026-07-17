@@ -18,13 +18,22 @@ npx wrangler kv namespace create ODUSITE_CACHE_TAGS   # put the id into wrangler
 npx wrangler secret put ODUSITE_TOKEN                 # from Odoo settings
 npx wrangler secret put ODUSITE_REVALIDATE_SECRET     # same value as in Odoo
 npx wrangler secret put TURNSTILE_SECRET_KEY          # optional, for forms
+npx wrangler secret put CF_ACCESS_CLIENT_ID           # optional, if Odoo is behind Cloudflare Access
+npx wrangler secret put CF_ACCESS_CLIENT_SECRET       # optional, pairs with the above
 ```
 
 Edit `wrangler.jsonc` vars:
 
-- `ODOO_URL` — base URL of the Odoo instance (must be reachable from Cloudflare),
+- `ODOO_URL` — base URL of the Odoo instance (must be reachable from Cloudflare;
+  either a Cloudflare Tunnel hostname or a public Odoo origin — see
+  [topologies.md](topologies.md)),
 - `PUBLIC_SITE_URL` — the canonical site origin,
 - `PUBLIC_TURNSTILE_SITE_KEY` — optional.
+
+`CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` are optional: set both only
+when Odoo sits behind a Cloudflare Access service-token policy, and the Worker
+sends them on every Odoo request. Left unset, they are omitted. See
+[topologies.md](topologies.md).
 
 ## Blocks and theme (build time)
 
