@@ -20,7 +20,7 @@ download) are borrowed from an internal reference module and adapted to Odoo 19.
     'category': 'Website',
     'version': '19.0.1.0.0',
     'author': 'Oduist OÜ',
-    'license': 'MIT',
+    'license': 'Other OSI approved licence',
     'depends': ['odusite_base'],
     'external_dependencies': {'python': ['boto3']},
     'data': [

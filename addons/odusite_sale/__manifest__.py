@@ -14,7 +14,7 @@ Odusite eCommerce API (see specs/modules/odusite_sale.md):
     'category': 'Website',
     'version': '19.0.1.0.0',
     'author': 'Oduist OÜ',
-    'license': 'MIT',
+    'license': 'Other OSI approved licence',
     'depends': ['odusite_base', 'odusite_portal', 'website_sale'],
     'data': [],
     'installable': True,

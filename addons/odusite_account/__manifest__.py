@@ -13,7 +13,7 @@ Payment goes through odusite_payment with document "invoice:<id>".
     'category': 'Website',
     'version': '19.0.1.0.0',
     'author': 'Oduist OÜ',
-    'license': 'MIT',
+    'license': 'Other OSI approved licence',
     'depends': ['odusite_base', 'odusite_portal', 'odusite_payment', 'account'],
     'installable': True,
 }
