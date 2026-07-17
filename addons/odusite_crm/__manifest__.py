@@ -10,7 +10,7 @@ Odusite endpoints for website_crm:
     'category': 'Website',
     'version': '19.0.1.0.0',
     'author': 'Oduist OÜ',
-    'license': 'MIT',
+    'license': 'Other OSI approved licence',
     'depends': ['odusite_base', 'website_crm'],
     'installable': True,
 }

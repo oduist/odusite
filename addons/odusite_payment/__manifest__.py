@@ -17,7 +17,7 @@ provider.code == 'stripe' checks.
     'category': 'Website',
     'version': '19.0.1.0.0',
     'author': 'Oduist OÜ',
-    'license': 'MIT',
+    'license': 'Other OSI approved licence',
     'depends': ['odusite_base', 'payment', 'account_payment'],
     'installable': True,
 }

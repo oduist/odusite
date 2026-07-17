@@ -12,7 +12,7 @@ Odusite API for forums (website_forum):
     'category': 'Website',
     'version': '19.0.1.0.0',
     'author': 'Oduist OÜ',
-    'license': 'MIT',
+    'license': 'Other OSI approved licence',
     'depends': ['odusite_base', 'odusite_portal', 'website_forum'],
     'installable': True,
 }

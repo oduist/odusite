@@ -11,7 +11,7 @@ Odusite endpoints for website_mass_mailing:
     'category': 'Website',
     'version': '19.0.1.0.0',
     'author': 'Oduist OÜ',
-    'license': 'MIT',
+    'license': 'Other OSI approved licence',
     'depends': ['odusite_base', 'website_mass_mailing'],
     'installable': True,
 }

@@ -12,7 +12,7 @@ Odusite API for events (website_event):
     'category': 'Website',
     'version': '19.0.1.0.0',
     'author': 'Oduist OÜ',
-    'license': 'MIT',
+    'license': 'Other OSI approved licence',
     'depends': ['odusite_base', 'website_event'],
     'installable': True,
 }

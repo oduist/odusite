@@ -14,7 +14,7 @@ Portal projects and tasks for the Odusite frontend
     'category': 'Website',
     'version': '19.0.1.0.0',
     'author': 'Oduist OÜ',
-    'license': 'MIT',
+    'license': 'Other OSI approved licence',
     'depends': ['odusite_base', 'odusite_portal', 'project'],
     'installable': True,
 }

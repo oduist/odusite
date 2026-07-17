@@ -28,6 +28,7 @@ Status: ✅ done · 🚧 in progress · ⬜ planned.
 | Voice assistant (ElevenLabs, navigate/search client tools) — optional, env-gated | — | — | ✅ |
 | Astro scaffold, theming, default dark theme | — | — | ✅ |
 | CI (addon tests on odoo:19.0 + site check/build) | — | — | ✅ |
+| CD (auto-deploy site to Cloudflare Workers on push to main) + Odoo backend hosted on Oduflow | — | — | ✅ |
 
 ## Phase 2 — Extended commerce & portal
 

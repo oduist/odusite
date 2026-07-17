@@ -49,12 +49,40 @@ A block only works when its Odoo addon is installed (see
 
 ## Deploy
 
+### Manual
+
 ```bash
 pnpm deploy        # astro build && wrangler deploy
 ```
 
 Attach a custom domain to the Worker in the Cloudflare dashboard, then set the
-same URL as **Site URL** in Odoo settings.
+same URL as **Site URL** in Odoo settings (`web.base.url` / `odusite.site_url`).
+
+### Automatic (GitHub Actions)
+
+The `Deploy site` workflow (`.github/workflows/deploy-site.yml`) builds and
+deploys the **production** Worker on every push to `main` that touches `site/**`
+(and on manual **Run workflow** / `workflow_dispatch`). It runs the same
+`pnpm install → pnpm build → wrangler deploy` steps as above.
+
+One-time setup — add two repository secrets under
+**Settings → Secrets and variables → Actions**:
+
+- `CLOUDFLARE_API_TOKEN` — a Cloudflare API token with **Workers Scripts: Edit**,
+  **Workers KV Storage: Edit** and **Account: Read** (dashboard →
+  My Profile → API Tokens).
+- `CLOUDFLARE_ACCOUNT_ID` — your Cloudflare account id.
+
+The workflow does **not** manage Worker secrets or vars: `ODUSITE_TOKEN`,
+`ODUSITE_REVALIDATE_SECRET` (and optional ones) are set once with
+`wrangler secret put` and persist across deploys; `ODOO_URL` / `PUBLIC_SITE_URL`
+and the KV binding are committed in `wrangler.jsonc`. Change those with a normal
+commit (they redeploy on the next push to `main`).
+
+> The Cloudflare adapter output (`dist/_worker.js`, `dist/_routes.json`) is kept
+> out of the public asset upload by `site/public/.assetsignore`, which Astro
+> copies into `dist/` on every build. Do not delete it or `wrangler deploy`
+> fails with an "Uploading a Pages _worker.js directory as an asset" error.
 
 ## Local development
 
