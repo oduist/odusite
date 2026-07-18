@@ -178,7 +178,15 @@ export const onRequest = defineMiddleware(async (context, next) => {
   ) {
     response = storePage(context, response);
   }
-  response.headers.set('X-Content-Type-Options', 'nosniff');
+  // A route that returns a Response straight from the Cache API (or fetch) has
+  // immutable headers; mutating them throws "Can't modify immutable headers"
+  // and the request 500s/reroutes. Re-wrap into a mutable response first.
+  try {
+    response.headers.set('X-Content-Type-Options', 'nosniff');
+  } catch {
+    response = new Response(response.body, response);
+    response.headers.set('X-Content-Type-Options', 'nosniff');
+  }
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
   response.headers.set('X-Frame-Options', 'DENY');
   return response;
