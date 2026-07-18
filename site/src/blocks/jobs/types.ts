@@ -6,13 +6,19 @@ export interface JobLocation {
   country: string | null;
 }
 
+/** A related record the API returns as `{id, name}` (department, contract type). */
+export interface JobRef {
+  id: number;
+  name: string;
+}
+
 export interface JobListItem {
   id: number;
   slug: string;
   name: string;
-  department: string | null;
+  department: JobRef | null;
   location: JobLocation | null;
-  employment_type: string | null;
+  employment_type: JobRef | null;
   is_remote: boolean;
   published_date: string | null;
 }
