@@ -1,5 +1,6 @@
+import type { APIContext } from 'astro';
 import { defineMiddleware } from 'astro:middleware';
-import { getEnv } from './lib/env';
+import { getEnv, odooAccessHeaders } from './lib/env';
 import { matchPage, storePage } from './lib/cache';
 import { getLocaleInfo, splitLocale } from './lib/i18n';
 import {
@@ -18,8 +19,52 @@ const LANG_MAX_AGE = 60 * 60 * 24 * 365;
 // config lookup or risk mis-parsing a path segment as a language.
 const NON_PAGE = /^\/(api|img|_)|\.[a-z0-9]+$/i;
 
+// Image proxy (/img/** -> Odoo /web/image/**, ADR-009). Handled in the
+// middleware, before Astro route matching, so it never depends on rest-route
+// priority (/img/[...path] vs the [...slug] catch-all) — that resolution proved
+// unstable on Cloudflare and made images intermittently 404. Only the `unique`
+// cache-buster is forwarded upstream (extra params make Odoo /web/image 500).
+async function proxyImage(context: APIContext): Promise<Response> {
+  const env = getEnv(context);
+  const path = context.url.pathname.slice('/img/'.length);
+  const upstream = new URL(`/web/image/${path}`, env.ODOO_URL);
+  const unique = context.url.searchParams.get('unique');
+  if (unique) upstream.searchParams.set('unique', unique);
+
+  const cache = typeof caches !== 'undefined' ? await caches.open('odusite:img') : null;
+  const cacheKey = new Request(context.request.url, { method: 'GET' });
+  const hit = await cache?.match(cacheKey);
+  if (hit) return hit;
+
+  const response = await fetch(upstream, {
+    headers: {
+      Accept: context.request.headers.get('Accept') ?? 'image/*',
+      ...odooAccessHeaders(env),
+    },
+  });
+  if (!response.ok) return new Response(null, { status: response.status });
+
+  const headers = new Headers(response.headers);
+  headers.set(
+    'Cache-Control',
+    unique ? 'public, max-age=31536000, immutable' : 'public, max-age=86400',
+  );
+  headers.delete('Set-Cookie');
+  const proxied = new Response(response.body, { status: 200, headers });
+  if (cache) {
+    const runtime = (context.locals as App.Locals).runtime;
+    runtime?.ctx?.waitUntil?.(cache.put(cacheKey, proxied.clone()));
+  }
+  return proxied;
+}
+
 export const onRequest = defineMiddleware(async (context, next) => {
   const { cookies, locals, url } = context;
+
+  // Image proxy: resolve before any routing/locale/auth work.
+  if (url.pathname.startsWith('/img/') && context.request.method === 'GET') {
+    return proxyImage(context);
+  }
 
   // 1. Language + locale routing. A non-default language is a URL prefix
   //    (`/ru/...`): resolve it, remember it in the cookie so later unprefixed
