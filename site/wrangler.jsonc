@@ -17,7 +17,7 @@
   ],
   "vars": {
     "ODOO_URL": "https://odusite.team.dev.oduist.com",
-    "PUBLIC_SITE_URL": "https://odusite.lit-max-box.workers.dev"
+    "PUBLIC_SITE_URL": "https://odusite.oduflow.dev"
   }
   // Secrets (wrangler secret put): ODUSITE_TOKEN, ODUSITE_REVALIDATE_SECRET,
   // TURNSTILE_SECRET_KEY. Public vars may also be set per environment.

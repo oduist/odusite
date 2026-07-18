@@ -15,16 +15,27 @@
     id="od-voice-btn"
     class="od-voice__btn"
     type="button"
-    aria-label="Talk to the assistant"
+    aria-label="Start the AI Voice Navigator"
     aria-pressed="false"
   >
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-      <rect x="9" y="3" width="6" height="11" rx="3" />
-      <path d="M6 11a6 6 0 0 0 12 0" />
-      <path d="M12 17v4" />
-    </svg>
+    <span class="od-voice__ring" aria-hidden="true"></span>
+    <span class="od-voice__icon" aria-hidden="true">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="9" y="3" width="6" height="11" rx="3" />
+        <path d="M6 11a6 6 0 0 0 12 0" />
+        <path d="M12 17v4" />
+      </svg>
+    </span>
+    <span class="od-voice__text">
+      <span class="od-voice__title">
+        AI Voice Navigator
+        <span class="od-voice__badge" aria-hidden="true">NEW</span>
+      </span>
+      <span id="od-voice-status" class="od-voice__status" role="status" aria-live="polite"
+        >Ask — I'll take you there</span
+      >
+    </span>
   </button>
-  <span id="od-voice-status" class="od-voice__status" role="status" aria-live="polite"></span>
 </div>
 
 <script>
@@ -35,8 +46,58 @@
   declare global {
     interface Window {
       __odVoiceConv?: { endSession: () => Promise<void> } | null;
+      __odVoiceAudioPatched?: boolean;
     }
   }
+
+  const IDLE_STATUS = "Ask — I'll take you there";
+
+  // --- Keep audio playing -------------------------------------------------
+  // The ElevenLabs SDK plays agent audio through a Web Audio AudioContext it
+  // owns and does not expose. Browsers suspend an AudioContext when the tab is
+  // backgrounded (and, on some engines, after a stretch of inactivity): the
+  // WebSocket keeps running — so the call log still shows the agent talking —
+  // but no sound comes out. We wrap the AudioContext constructor to collect the
+  // instances the SDK creates, then resume any that fall asleep whenever the
+  // page is shown again and on a short interval while a call is live.
+  const audioContexts = new Set<AudioContext>();
+  function captureAudioContexts() {
+    const w = window as unknown as {
+      AudioContext?: typeof AudioContext;
+      webkitAudioContext?: typeof AudioContext;
+      __odVoiceAudioPatched?: boolean;
+    };
+    if (w.__odVoiceAudioPatched) return;
+    const Native = w.AudioContext || w.webkitAudioContext;
+    if (!Native) return;
+    const Patched = function (this: unknown, ...args: unknown[]) {
+      const ctx = new (Native as unknown as new (...a: unknown[]) => AudioContext)(...args);
+      audioContexts.add(ctx);
+      return ctx;
+    } as unknown as typeof AudioContext;
+    Patched.prototype = Native.prototype;
+    if (w.AudioContext) w.AudioContext = Patched;
+    if (w.webkitAudioContext) w.webkitAudioContext = Patched;
+    w.__odVoiceAudioPatched = true;
+  }
+  function resumeAudio() {
+    for (const ctx of audioContexts) {
+      if (ctx.state === 'suspended') void ctx.resume().catch(() => {});
+    }
+  }
+  let keepAwake: ReturnType<typeof setInterval> | null = null;
+  function startKeepAwake() {
+    if (keepAwake) return;
+    keepAwake = setInterval(resumeAudio, 3000);
+  }
+  function stopKeepAwake() {
+    if (keepAwake) clearInterval(keepAwake);
+    keepAwake = null;
+    for (const ctx of audioContexts) audioContexts.delete(ctx);
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && window.__odVoiceConv) resumeAudio();
+  });
 
   function initVoice() {
     const btn = document.getElementById('od-voice-btn');
@@ -56,6 +117,7 @@
     const reset = () => {
       window.__odVoiceConv = null;
       setActive(false);
+      stopKeepAwake();
     };
 
     const clientTools = {
@@ -75,6 +137,8 @@
     };
 
     btn.addEventListener('click', async () => {
+      // Any click is a user gesture — a good moment to wake sleeping audio.
+      resumeAudio();
       if (window.__odVoiceConv) {
         try {
           await window.__odVoiceConv.endSession();
@@ -82,7 +146,7 @@
           /* ignore */
         }
         reset();
-        setStatus('');
+        setStatus(IDLE_STATUS);
         return;
       }
       setStatus('Connecting…');
@@ -93,6 +157,7 @@
           return;
         }
         const { signed_url: signedUrl } = (await res.json()) as { signed_url: string };
+        captureAudioContexts();
         const { Conversation } = await import('@elevenlabs/client');
         window.__odVoiceConv = await Conversation.startSession({
           signedUrl,
@@ -101,12 +166,16 @@
             if (status === 'connected') {
               setActive(true);
               setStatus('Listening…');
+              startKeepAwake();
+              resumeAudio();
             } else if (status === 'disconnected') {
               reset();
-              setStatus('');
+              setStatus(IDLE_STATUS);
             }
           },
           onModeChange: ({ mode }: { mode: string }) => {
+            // The agent just started speaking — make sure output is awake.
+            if (mode === 'speaking') resumeAudio();
             setStatus(mode === 'speaking' ? 'Speaking…' : 'Listening…');
           },
           onError: () => {
@@ -131,44 +200,141 @@
     right: var(--od-space-5, 1.25rem);
     bottom: var(--od-space-5, 1.25rem);
     z-index: 80;
-    display: flex;
-    align-items: center;
-    gap: var(--od-space-3, 0.75rem);
-    flex-direction: row-reverse;
   }
   .od-voice__btn {
-    width: 3.25rem;
-    height: 3.25rem;
-    border-radius: var(--od-radius-full, 999px);
-    border: 1px solid var(--od-border-strong, rgba(255, 255, 255, 0.2));
-    background: var(--od-accent, #6366f1);
-    color: var(--od-accent-fg, #fff);
-    display: flex;
+    position: relative;
+    display: inline-flex;
     align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    box-shadow: var(--od-shadow-lg, 0 10px 30px rgba(0, 0, 0, 0.35));
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
-  }
-  .od-voice__btn:hover { transform: translateY(-1px); }
-  .od-voice__btn.is-active {
-    background: var(--od-danger, #ef4444);
-    animation: od-voice-pulse 1.6s ease-in-out infinite;
-  }
-  .od-voice__status {
-    font-size: var(--od-text-sm, 0.875rem);
-    color: var(--od-fg-muted, #9ca3af);
-    background: color-mix(in srgb, var(--od-bg, #111) 85%, transparent);
-    padding: var(--od-space-1, 0.25rem) var(--od-space-3, 0.75rem);
+    gap: var(--od-space-3, 0.75rem);
+    padding: 0.4rem 1.1rem 0.4rem 0.4rem;
     border-radius: var(--od-radius-full, 999px);
+    border: 1px solid color-mix(in srgb, #ffffff 22%, transparent);
+    color: #fff;
+    background: linear-gradient(
+      135deg,
+      var(--od-accent, #6366f1),
+      color-mix(in srgb, var(--od-accent, #6366f1) 45%, #d946ef)
+    );
+    cursor: pointer;
+    box-shadow:
+      0 10px 30px rgba(0, 0, 0, 0.35),
+      0 0 0 0 color-mix(in srgb, var(--od-accent, #6366f1) 60%, transparent);
+    transition:
+      transform 0.16s ease,
+      box-shadow 0.25s ease,
+      filter 0.16s ease;
+  }
+  .od-voice__btn:hover {
+    transform: translateY(-2px);
+    box-shadow:
+      0 14px 38px rgba(0, 0, 0, 0.42),
+      0 0 26px color-mix(in srgb, var(--od-accent, #6366f1) 55%, transparent);
+    filter: saturate(1.1);
+  }
+  .od-voice__btn:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 3px;
+  }
+
+  /* Attention ring: a soft pulse that draws the eye while idle. */
+  .od-voice__ring {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--od-accent, #6366f1) 70%, transparent);
+    animation: od-voice-attention 2.8s ease-out infinite;
+  }
+
+  .od-voice__icon {
+    display: grid;
+    place-items: center;
+    width: 2.4rem;
+    height: 2.4rem;
+    flex: none;
+    border-radius: var(--od-radius-full, 999px);
+    background: color-mix(in srgb, #ffffff 22%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, #ffffff 30%, transparent);
+  }
+  .od-voice__text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.15;
+    text-align: left;
+  }
+  .od-voice__title {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-weight: 700;
+    font-size: var(--od-text-sm, 0.9rem);
+    letter-spacing: 0.01em;
     white-space: nowrap;
   }
-  .od-voice__status:empty { display: none; }
-  @keyframes od-voice-pulse {
-    0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--od-danger, #ef4444) 55%, transparent); }
-    50% { box-shadow: 0 0 0 10px transparent; }
+  .od-voice__badge {
+    font-size: 0.6rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    padding: 0.05rem 0.3rem;
+    border-radius: var(--od-radius-full, 999px);
+    background: #fff;
+    color: var(--od-accent, #6366f1);
+    text-transform: uppercase;
+  }
+  .od-voice__status {
+    font-size: 0.72rem;
+    color: color-mix(in srgb, #ffffff 82%, transparent);
+    white-space: nowrap;
+  }
+
+  /* Active call: switch to a "live / tap to stop" look. */
+  .od-voice__btn.is-active {
+    background: linear-gradient(
+      135deg,
+      var(--od-danger, #ef4444),
+      color-mix(in srgb, var(--od-danger, #ef4444) 60%, #f59e0b)
+    );
+  }
+  .od-voice__btn.is-active .od-voice__badge {
+    color: var(--od-danger, #ef4444);
+  }
+  .od-voice__btn.is-active .od-voice__ring {
+    animation: od-voice-live 1.5s ease-in-out infinite;
+  }
+
+  @keyframes od-voice-attention {
+    0% {
+      box-shadow: 0 0 0 0 color-mix(in srgb, var(--od-accent, #6366f1) 55%, transparent);
+    }
+    70%,
+    100% {
+      box-shadow: 0 0 0 14px transparent;
+    }
+  }
+  @keyframes od-voice-live {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 color-mix(in srgb, var(--od-danger, #ef4444) 55%, transparent);
+    }
+    50% {
+      box-shadow: 0 0 0 12px transparent;
+    }
+  }
+
+  @media (max-width: 30rem) {
+    .od-voice__status {
+      display: none;
+    }
+    .od-voice__title {
+      font-size: 0.82rem;
+    }
   }
   @media (prefers-reduced-motion: reduce) {
-    .od-voice__btn.is-active { animation: none; }
+    .od-voice__ring {
+      animation: none;
+    }
+    .od-voice__btn {
+      transition: none;
+    }
   }
 </style>
