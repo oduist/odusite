@@ -23,15 +23,12 @@ class TestSignupConfirm(OdusiteHttpCase):
         super().setUpClass()
         cls.ICP = cls.env['ir.config_parameter'].sudo()
 
-    def setUp(self):
-        super().setUp()
-        # The stable config cache outlives each test's savepoint rollback.
-        # Clear it at both boundaries so HTTP requests see the restored value.
-        self.env.registry.clear_cache('stable')
-        self.addCleanup(self.env.registry.clear_cache, 'stable')
-
     def _enable_b2c(self):
-        self.ICP.set_param('auth_signup.invitation_scope', 'b2c')
+        # Keep flow tests independent of the process-wide config cache. The
+        # settings-to-parameter integration is covered by its dedicated test.
+        self.patch(
+            self.registry['res.users'], '_get_signup_invitation_scope',
+            lambda _users: 'b2c')
 
     def _find_user(self, login):
         Users = self.env['res.users'].sudo().with_context(active_test=False)
