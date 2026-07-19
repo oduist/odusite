@@ -975,6 +975,34 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#provisioning-the-agent-pnpm-voicesync" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Provisioning the agent (pnpm voice:sync)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Provisioning the agent (pnpm voice:sync)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#in-ci" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        In CI
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#how-it-works" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1061,6 +1089,34 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#provisioning-the-agent-pnpm-voicesync" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Provisioning the agent (pnpm voice:sync)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Provisioning the agent (pnpm voice:sync)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#in-ci" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        In CI
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#how-it-works" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1108,13 +1164,17 @@ Conversational AI. It is <strong>off unless configured</strong>.</p>
 <h2 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">¶</a></h2>
 <ol>
 <li>An ElevenLabs account and an API key.</li>
-<li>A <strong>Conversational AI agent</strong> created in the ElevenLabs dashboard, configured
-   with two <strong>client tools</strong>:</li>
-<li><code>navigate</code> — one string parameter <code>path</code> (an absolute site path).</li>
-<li><code>search_site</code> — one string parameter <code>query</code>.
-   Give the agent a system prompt describing your site's sections and instruct it
-   to call these tools to move the visitor around / search.</li>
+<li>A <strong>Conversational AI agent</strong> in the ElevenLabs dashboard. You only pick the
+   voice, language, and LLM there — <strong>you do not configure the client tools or
+   the system prompt by hand</strong>. Those are provisioned from this repo with
+   <code>pnpm voice:sync</code> (see <em>Provisioning the agent</em> below), which keeps them in
+   step with which blocks your site ships.</li>
 </ol>
+<p>The agent drives the browser through three client tools:
+- <code>navigate(path)</code> — go to a known site section.
+- <code>search_site(query)</code> — run a site search.
+- <code>click_on_page(text)</code> — open a specific item visible on the current page
+  (a product, article, event, job, forum thread, …) by its name.</p>
 <h2 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">¶</a></h2>
 <p>Set two server-side variables (Cloudflare Worker secrets in production,
 <code>site/.dev.vars</code> in development — never commit them):</p>
@@ -1139,10 +1199,48 @@ Conversational AI. It is <strong>off unless configured</strong>.</p>
 <p>In production add them with <code>wrangler secret put ELEVENLABS_API_KEY</code> (and the
 agent id). When both are present the mic widget appears; when absent the site
 ships no voice code at all.</p>
+<h2 id="provisioning-the-agent-pnpm-voicesync">Provisioning the agent (<code>pnpm voice:sync</code>)<a class="headerlink" href="#provisioning-the-agent-pnpm-voicesync" title="Permanent link">¶</a></h2>
+<p>Instead of editing the agent in the dashboard, generate its prompt and tools
+from the site config:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nb">cd</span><span class="w"> </span>site
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="c1"># preview the changes without writing anything</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="nv">ELEVENLABS_API_KEY</span><span class="o">=</span>…<span class="w"> </span><span class="nv">ELEVENLABS_AGENT_ID</span><span class="o">=</span>…<span class="w"> </span>pnpm<span class="w"> </span>voice:sync<span class="w"> </span>--dry-run
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="c1"># apply</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="nv">ELEVENLABS_API_KEY</span><span class="o">=</span>…<span class="w"> </span><span class="nv">ELEVENLABS_AGENT_ID</span><span class="o">=</span>…<span class="w"> </span>pnpm<span class="w"> </span>voice:sync
+</span></code></pre></div>
+<p>What it does, idempotently:
+- Builds the <strong>system prompt</strong> from your enabled blocks (respects
+  <code>ODUSITE_BLOCK_*</code>), listing the sections the agent may open and teaching it the
+  <em>search/navigate → click</em> flow for individual items.
+- <strong>Creates any missing client tools</strong> (<code>navigate</code>, <code>search_site</code>,
+  <code>click_on_page</code>) on your ElevenLabs workspace and updates drifted ones.
+- Attaches those tools to the agent and sets its prompt. It never changes the
+  agent's voice, LLM, or persona — those stay owned by the dashboard.</p>
+<p>Flags / env:
+- <code>--dry-run</code> — print the planned diff and the prompt, write nothing.
+- <code>--create</code> — create a new agent (use when <code>ELEVENLABS_AGENT_ID</code> is not set
+  yet); it prints the new id to store as a secret.
+- <code>--site-name="My Store"</code> or <code>ODUSITE_SITE_NAME</code> — name used in the prompt.
+- Reads <code>ELEVENLABS_API_KEY</code> / <code>ELEVENLABS_AGENT_ID</code> from the shell or
+  <code>site/.dev.vars</code>.</p>
+<p>Re-run <code>voice:sync</code> whenever you enable/disable blocks or after updating the tool
+definitions.</p>
+<h3 id="in-ci">In CI<a class="headerlink" href="#in-ci" title="Permanent link">¶</a></h3>
+<p>The <code>Deploy site</code> workflow (<code>.github/workflows/deploy-site.yml</code>) runs
+<code>pnpm voice:sync --skip-if-unconfigured</code> after each deploy, so the agent is
+re-provisioned on every push to <code>main</code>. Set the repo <strong>secrets</strong>
+<code>ELEVENLABS_API_KEY</code> and <code>ELEVENLABS_AGENT_ID</code> (and optionally the repo
+<strong>variable</strong> <code>ODUSITE_SITE_NAME</code>) to enable it. When those secrets are absent the
+step is a clean no-op, so deployments without the voice assistant are unaffected.
+<code>--skip-if-unconfigured</code> turns "not configured" into a successful skip instead of
+an error.</p>
 <h2 id="how-it-works">How it works<a class="headerlink" href="#how-it-works" title="Permanent link">¶</a></h2>
 <p>The browser never sees the API key. It requests a short-lived signed WebSocket
 URL from <code>/api/voice/signed-url</code> (which calls ElevenLabs with the key), then
-connects directly. The agent drives navigation through the two client tools.</p>
+connects directly. The agent drives navigation through the three client tools;
+<code>click_on_page</code> opens individual items by matching the visible name against the
+links on the current page (blocks tag their entity links with
+<code>data-voice-label</code>), so no product/article URLs are hardcoded anywhere.</p>
 <h2 id="notes-privacy">Notes &amp; privacy<a class="headerlink" href="#notes-privacy" title="Permanent link">¶</a></h2>
 <ul>
 <li>Conversation minutes are billed by ElevenLabs against your account/plan.</li>
