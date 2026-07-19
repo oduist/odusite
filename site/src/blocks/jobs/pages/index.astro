@@ -156,13 +156,13 @@ Astro.response.headers.set(TAGS_HEADER, 'jobs');
                       <div class="job-card__main">
                         <h3 class="job-card__title">{job.name}</h3>
                         <p class="job-card__meta">
-                          {job.department && <span>{job.department}</span>}
+                          {job.department && <span>{job.department.name}</span>}
                           {location && <span>{location}</span>}
                           {published && <span>Posted {published}</span>}
                         </p>
                       </div>
                       <div class="job-card__badges">
-                        {job.employment_type && <Badge tone="info">{job.employment_type}</Badge>}
+                        {job.employment_type && <Badge tone="info">{job.employment_type.name}</Badge>}
                         {job.is_remote && <Badge tone="success">Remote</Badge>}
                       </div>
                     </div>

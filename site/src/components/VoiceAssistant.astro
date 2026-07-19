@@ -161,6 +161,20 @@
     return cands.filter((c) => c.norm.includes(q) || q.includes(c.norm));
   }
 
+  // The ElevenLabs SDK appends its <audio> output sink to document.body. Astro
+  // View Transitions replace <body> on navigation (including the agent's own
+  // navigate() tool), which removes that sink — the socket and mic keep going
+  // (the agent still hears you and navigates) but the voice goes silent. Before
+  // each swap, move any stray audio nodes into the transition:persist widget so
+  // playback survives the navigation.
+  document.addEventListener('astro:before-swap', () => {
+    const host = document.getElementById('od-voice');
+    if (!host || !window.__odVoiceConv) return;
+    document.querySelectorAll('audio').forEach((el) => {
+      if (!host.contains(el)) host.appendChild(el);
+    });
+  });
+
   function initVoice() {
     const btn = document.getElementById('od-voice-btn');
     if (!btn || btn.dataset.bound) return;
@@ -295,6 +309,10 @@
     right: var(--od-space-5, 1.25rem);
     bottom: var(--od-space-5, 1.25rem);
     z-index: 80;
+  }
+  /* Audio sinks re-parented here to survive navigation must not take space. */
+  .od-voice :global(audio) {
+    display: none;
   }
   .od-voice__btn {
     position: relative;

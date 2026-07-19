@@ -41,9 +41,9 @@ Astro.response.headers.set(TAGS_HEADER, `jobs,jobs:${job.id}`);
       <p class="job-head__back"><a href="/jobs">← All positions</a></p>
       <h1>{job.name}</h1>
       <div class="job-head__chips">
-        {job.department && <Badge>{job.department}</Badge>}
+        {job.department && <Badge>{job.department.name}</Badge>}
         {location && <Badge>{location}</Badge>}
-        {job.employment_type && <Badge tone="info">{job.employment_type}</Badge>}
+        {job.employment_type && <Badge tone="info">{job.employment_type.name}</Badge>}
         {job.is_remote && <Badge tone="success">Remote</Badge>}
       </div>
     </header>
