@@ -1,6 +1,16 @@
 /* Base element styles for theme "default". */
 @import './tokens.css';
 
+/* Display face: Gambarino (Fontshare), self-hosted, single weight.
+   Serif fallback keeps headings warm and covers glyphs Gambarino lacks. */
+@font-face {
+  font-family: 'Gambarino';
+  src: url('/fonts/gambarino-regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 *,
 *::before,
 *::after {
@@ -24,10 +34,27 @@ body {
 }
 
 h1, h2, h3, h4 {
-  line-height: 1.25;
-  letter-spacing: -0.015em;
   margin: 0 0 var(--od-space-4);
+  text-wrap: balance;
+}
+
+/* Big editorial headings ride the display serif. Gambarino is a single-weight
+   face, so we set weight 400 and disable synthesis to avoid faux bold; the
+   hierarchy comes from scale, not weight. Serifs get air (loose tracking). */
+h1, h2 {
+  font-family: var(--od-font-display);
+  font-weight: 400;
+  font-synthesis: none;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+}
+
+/* UI-level headings (card titles, form/section labels) stay in the neutral sans. */
+h3, h4 {
+  font-family: var(--od-font-sans);
   font-weight: 650;
+  letter-spacing: -0.015em;
+  line-height: 1.3;
 }
 
 h1 { font-size: var(--od-text-3xl); }
@@ -38,6 +65,7 @@ h4 { font-size: var(--od-text-lg); }
 p {
   margin: 0 0 var(--od-space-4);
   color: var(--od-fg-muted);
+  text-wrap: pretty;
 }
 
 a {

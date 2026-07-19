@@ -1,5 +1,5 @@
 {
   "name": "default",
-  "base": "dark",
-  "description": "Restrained dark theme: near-black blue-tinted surfaces, single violet-blue accent, system fonts."
+  "base": "light",
+  "description": "Bright editorial theme: a crisp near-white paper, near-black ink, and one bold scarlet accent, with a Gambarino display serif over a neutral system sans. High-contrast and light."
 }
