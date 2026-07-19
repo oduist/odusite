@@ -1,8 +1,15 @@
 ---
 // Compact newsletter subscribe form, designed for the footer. Posts JSON to
 // the same-origin /api/newsletter/subscribe endpoint (odusite_mass_mailing);
-// anti-spam is the hidden honeypot field only — no Turnstile for this form.
+// anti-spam is the hidden honeypot field plus Turnstile when configured.
+import { getEnv } from '@lib/env';
+
+const turnstileSiteKey = getEnv(Astro).PUBLIC_TURNSTILE_SITE_KEY;
 ---
+
+{turnstileSiteKey && (
+  <script is:inline src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+)}
 
 <form class="od-newsletter" aria-label="Newsletter subscription">
   <p class="od-newsletter__title">Newsletter</p>
@@ -30,6 +37,9 @@
       autocomplete="off"
     />
   </div>
+  {turnstileSiteKey && (
+    <div id="newsletter-turnstile" class="cf-turnstile od-newsletter__turnstile" data-sitekey={turnstileSiteKey}></div>
+  )}
   <p class="od-newsletter__msg" role="status" hidden></p>
 </form>
 
@@ -74,6 +84,9 @@
         show('Network error. Please try again.', false);
       } finally {
         if (button) button.disabled = false;
+        // A consumed Turnstile token cannot be reused — reset for a retry.
+        (window as unknown as { turnstile?: { reset?: (widget?: string) => void } })
+          .turnstile?.reset?.('#newsletter-turnstile');
       }
     });
   }
@@ -128,6 +141,9 @@
     width: 1px;
     height: 1px;
     overflow: hidden;
+  }
+  .od-newsletter__turnstile {
+    margin-top: var(--od-space-3);
   }
   .od-newsletter__msg {
     font-size: var(--od-text-xs);

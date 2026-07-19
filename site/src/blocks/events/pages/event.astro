@@ -6,6 +6,7 @@ import Card from '@theme/Card.astro';
 import Hero from '@theme/Hero.astro';
 import Input from '@theme/Input.astro';
 import { apiFetch, imgUrl, OdusiteApiError } from '@lib/api/client';
+import { getEnv } from '@lib/env';
 import {
   formatEventRange,
   formatMoney,
@@ -16,6 +17,8 @@ import {
 import type { EventDetail, EventTicket } from '../types';
 
 export const prerender = false;
+
+const turnstileSiteKey = getEnv(Astro).PUBLIC_TURNSTILE_SITE_KEY;
 
 const slug = Astro.params.slug ?? '';
 let event: EventDetail;
@@ -75,6 +78,10 @@ const Tickets = canRegister ? 'form' : 'div';
   description={event.seo?.description || event.subtitle || undefined}
   ogImage={event.seo?.og_image || event.cover}
 >
+  {canRegister && turnstileSiteKey && (
+    <script is:inline src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+  )}
+
   <Hero title={event.name} subtitle={event.subtitle ?? undefined} image={imgUrl(event.cover)}>
     <div class="event-meta">
       <p class="event-meta__when">{when}</p>
@@ -153,6 +160,9 @@ const Tickets = canRegister ? 'form' : 'div';
             {canRegister ? (
               <>
                 <div class="attendees" id="attendees"></div>
+                {turnstileSiteKey && (
+                  <div id="event-register-turnstile" class="cf-turnstile event-register__turnstile" data-sitekey={turnstileSiteKey}></div>
+                )}
                 <p class="register-msg" id="register-msg" role="alert" hidden></p>
                 <Button type="submit" class="register-submit">Register</Button>
               </>
@@ -278,9 +288,14 @@ const Tickets = canRegister ? 'form' : 'div';
         return;
       }
 
+      // Include the Turnstile token the widget injected into the form (empty
+      // when the widget is disabled; the server enforces only when configured).
+      const turnstileToken =
+        form.querySelector<HTMLInputElement>('input[name="cf-turnstile-response"]')?.value ?? '';
       const payload = {
         event_id: Number(form.dataset.eventId),
         tickets: Array.from(byTicket, ([ticket_id, attendees]) => ({ ticket_id, attendees })),
+        'cf-turnstile-response': turnstileToken,
       };
 
       if (submit) submit.disabled = true;
@@ -303,6 +318,9 @@ const Tickets = canRegister ? 'form' : 'div';
         showMessage('Network error. Please try again.');
       } finally {
         if (submit) submit.disabled = false;
+        // A consumed Turnstile token cannot be reused — reset for a retry.
+        (window as unknown as { turnstile?: { reset?: (widget?: string) => void } })
+          .turnstile?.reset?.('#event-register-turnstile');
       }
     });
   }

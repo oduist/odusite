@@ -78,6 +78,55 @@ export function decodeJwtPayload(token: string): Record<string, unknown> | null 
   }
 }
 
+function base64UrlToBytes(segment: string): ArrayBuffer {
+  const base64 = segment.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+  const binary = atob(padded);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes.buffer;
+}
+
+/**
+ * Verify an HS256 access token against the shared Odoo secret and return its
+ * payload, or `null` when the signature/type/expiry is invalid. Mirrors
+ * odusite_base/lib/jwt.py: HMAC-SHA256 is always computed before the payload is
+ * trusted, so a forged `alg:none`/unsigned token is rejected.
+ */
+export async function verifyAccessToken(
+  token: string,
+  secret: string,
+): Promise<Record<string, unknown> | null> {
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  const [header, payload, signature] = parts;
+  try {
+    const key = await crypto.subtle.importKey(
+      'raw',
+      new TextEncoder().encode(secret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['verify'],
+    );
+    const valid = await crypto.subtle.verify(
+      'HMAC',
+      key,
+      base64UrlToBytes(signature),
+      new TextEncoder().encode(`${header}.${payload}`),
+    );
+    if (!valid) return null;
+    const claims = JSON.parse(new TextDecoder().decode(base64UrlToBytes(payload))) as Record<
+      string,
+      unknown
+    >;
+    if (claims.typ !== 'access') return null;
+    if (typeof claims.exp === 'number' && Date.now() / 1000 > claims.exp) return null;
+    return claims;
+  } catch {
+    return null;
+  }
+}
+
 export function isJwtExpired(token: string, skewSeconds = 30): boolean {
   const payload = decodeJwtPayload(token);
   const exp = typeof payload?.exp === 'number' ? payload.exp : 0;

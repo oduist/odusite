@@ -15,10 +15,21 @@
       "id": "b512b2c1bc1f4da7aebd4727f746b2f7"
     }
   ],
+  // Per-IP rate limiter for the public voice-token broker (/api/voice/signed-url):
+  // 2 requests per 60s per client IP. `period` must be 10 or 60.
+  "ratelimits": [
+    {
+      "name": "VOICE_RL",
+      "namespace_id": "1001",
+      "simple": { "limit": 2, "period": 60 }
+    }
+  ],
   "vars": {
     "ODOO_URL": "https://odusite.team.dev.oduist.com",
-    "PUBLIC_SITE_URL": "https://odusite.oduflow.dev"
+    "PUBLIC_SITE_URL": "https://odusite.oduflow.dev",
+    "PUBLIC_TURNSTILE_SITE_KEY": "0x4AAAAAAD4sD26bYfZFeNmo"
   }
   // Secrets (wrangler secret put): ODUSITE_TOKEN, ODUSITE_REVALIDATE_SECRET,
-  // TURNSTILE_SECRET_KEY. Public vars may also be set per environment.
+  // TURNSTILE_SECRET_KEY, ODUSITE_JWT_SECRET. Public vars may also be set
+  // per environment.
 }

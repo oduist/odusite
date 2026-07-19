@@ -11,6 +11,7 @@ import {
   isJwtExpired,
   setAuthCookies,
   clearAuthCookies,
+  verifyAccessToken,
 } from './lib/auth/session';
 
 const LANG_MAX_AGE = 60 * 60 * 24 * 365;
@@ -135,7 +136,13 @@ export const onRequest = defineMiddleware(async (context, next) => {
     }
   }
   if (access) {
-    const payload = decodeJwtPayload(access);
+    // Verify the signature when the shared secret is available; otherwise fall
+    // back to an unverified decode (Odoo still verifies every API call, so this
+    // only governs SSR UI state — see lib/auth/session.ts).
+    const jwtSecret = getEnv(context).ODUSITE_JWT_SECRET;
+    const payload = jwtSecret
+      ? await verifyAccessToken(access, jwtSecret)
+      : decodeJwtPayload(access);
     locals.user = payload
       ? {
           id: Number(payload.sub ?? 0),

@@ -8,11 +8,12 @@
 // manually below, copying the X-Odusite-Token / lang pattern from client.ts.
 import type { APIRoute } from 'astro';
 import { getEnv } from '@lib/env';
-import { verifyTurnstile } from '../lib/turnstile';
+import { enforceTurnstile } from '@lib/turnstile';
 
 export const prerender = false;
 
 const CV_NAME_RE = /\.(pdf|docx?)$/i;
+const MAX_CV_BYTES = 10 * 1024 * 1024;
 const OPTIONAL_FIELDS = ['linkedin', 'short_introduction'] as const;
 
 function json(status: number, payload: unknown): Response {
@@ -36,22 +37,16 @@ export const POST: APIRoute = async (context) => {
     return jsonError(400, 'bad_request', 'Expected multipart form data.');
   }
 
-  // Anti-bot check comes first; only forward verified submissions.
-  if (env.TURNSTILE_SECRET_KEY) {
-    const token = form.get('cf-turnstile-response');
-    const result = await verifyTurnstile(
-      env.TURNSTILE_SECRET_KEY,
-      typeof token === 'string' ? token : null,
-      context.request.headers.get('CF-Connecting-IP'),
-    );
-    if (!result.ok) {
-      return jsonError(
-        403,
-        'turnstile_failed',
-        'Anti-bot verification failed. Please reload the page and try again.',
-      );
-    }
-  }
+  // Anti-bot check comes first; only forward verified submissions. Fails
+  // closed when the widget is configured but the secret is missing.
+  const token = form.get('cf-turnstile-response');
+  const turnstileBlocked = await enforceTurnstile(
+    env,
+    typeof token === 'string' ? token : null,
+    context.request.headers.get('CF-Connecting-IP'),
+    new URL(context.request.url).hostname,
+  );
+  if (turnstileBlocked) return turnstileBlocked;
 
   const text = (key: string): string => {
     const value = form.get(key);
@@ -77,6 +72,9 @@ export const POST: APIRoute = async (context) => {
   if (!CV_NAME_RE.test(cv.name)) {
     return jsonError(422, 'invalid_cv', 'The CV must be a PDF or Word document (.pdf, .doc, .docx).');
   }
+  if (cv.size > MAX_CV_BYTES) {
+    return jsonError(413, 'cv_too_large', 'The CV must be under 10 MB.');
+  }
 
   // Manual multipart forward to Odoo — same token/lang pattern as apiFetch.
   // Only whitelisted fields are forwarded (Turnstile token, honeypots and
@@ -94,9 +92,13 @@ export const POST: APIRoute = async (context) => {
   }
   outbound.set('cv', cv, cv.name);
 
+  const applyHeaders: Record<string, string> = { 'X-Odusite-Token': env.ODUSITE_TOKEN };
+  const clientIp = context.request.headers.get('CF-Connecting-IP');
+  if (clientIp) applyHeaders['X-Odusite-Client-IP'] = clientIp;
+
   const response = await fetch(url, {
     method: 'POST',
-    headers: { 'X-Odusite-Token': env.ODUSITE_TOKEN },
+    headers: applyHeaders,
     body: outbound,
   });
 

@@ -11,6 +11,7 @@ import re
 from odoo import fields, http
 from odoo.exceptions import ValidationError
 from odoo.http import content_disposition, request
+from odoo.tools import email_normalize
 
 from odoo.addons.odusite_base.controllers.api import (
     API_PREFIX,
@@ -199,6 +200,9 @@ class OdusiteEventController(http.Controller):
 
     @odusite_route(f'{API_PREFIX}/events/<int:event_id>/register', methods=['POST'])
     def event_register(self, event_id, **kwargs):
+        # Per-IP throttle: registrations send confirmation emails to arbitrary
+        # attendee addresses, so cap them (defense in depth behind Turnstile).
+        request.env['odusite.rate.limit']._enforce(scope='event_register', limit=10, window=3600)
         event = self._get_event(event_id)
         event_sudo = event.sudo()
 
@@ -289,6 +293,9 @@ class OdusiteEventController(http.Controller):
         if missing:
             raise ApiError(422, 'validation_error', 'Missing attendee fields.',
                            {'fields': missing})
+        if not email_normalize(text('email')):
+            raise ApiError(422, 'validation_error', 'Invalid attendee email address.',
+                           {'fields': {'email': 'invalid'}})
         values = {
             'event_id': event.id,
             'event_ticket_id': ticket.id if ticket else False,

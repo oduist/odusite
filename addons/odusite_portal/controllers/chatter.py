@@ -24,6 +24,9 @@ from odoo.addons.portal.controllers.portal import CustomerPortal
 # (portal/controllers/portal_thread.py _get_non_empty_message_domain).
 EMPTY_EDITED_BODY = '<span class="o-mail-Message-edited"></span>'
 
+# Upper bound for a single chatter attachment upload (bytes).
+MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024
+
 
 class OdusiteChatterController(CustomerPortal):
 
@@ -176,9 +179,15 @@ class OdusiteChatterController(CustomerPortal):
                  or request.httprequest.files.get('ufile'))
         if ufile is None:
             raise ApiError(400, 'bad_request', "Missing multipart file field 'file'.")
+        # Bound the in-memory read: read at most MAX+1 bytes and reject over the
+        # limit, so a large upload cannot exhaust the worker's memory.
+        data = ufile.read(MAX_ATTACHMENT_BYTES + 1)
+        if len(data) > MAX_ATTACHMENT_BYTES:
+            raise ApiError(413, 'payload_too_large',
+                           'The attachment is too large (max 25 MB).')
         attachment = request.env['ir.attachment'].sudo().create({
             'name': ufile.filename or 'attachment',
-            'raw': ufile.read(),
+            'raw': data,
             'res_model': 'mail.compose.message',
             'res_id': 0,
         })

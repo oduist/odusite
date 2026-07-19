@@ -155,6 +155,9 @@ class OdusiteAuthController(http.Controller):
         if not isinstance(login, str) or not isinstance(password, str) \
                 or not login.strip() or not password:
             raise ApiError(400, 'bad_request', 'login and password are required.')
+        # Per-IP throttle against credential stuffing (stock _login also has its
+        # own per-login cooldown).
+        request.env['odusite.rate.limit']._enforce(scope='login', limit=10, window=900)
         user = self._login_user(login.strip(), password)
         return self._auth_response(user)
 
@@ -188,6 +191,8 @@ class OdusiteAuthController(http.Controller):
         if not isinstance(password, str) or not password.strip():
             raise ApiError(422, 'validation_error', 'Password is required.',
                            {'fields': {'password': 'This field is required.'}})
+        # Per-IP throttle against mass account creation / confirmation-email spam.
+        request.env['odusite.rate.limit']._enforce(scope='signup', limit=5, window=3600)
         token_info = {}
         if token:
             token_info = self._signup_token_info(token)
@@ -219,12 +224,19 @@ class OdusiteAuthController(http.Controller):
             login, _password = request.env['res.users'].sudo().signup(values, token)
         except (SignupError, ValueError, AssertionError) as exc:
             Users = request.env['res.users'].sudo().with_context(active_test=False)
-            if values['login'] and Users.search_count(
-                    Users._get_login_domain(values['login']), limit=1):
-                raise ApiError(
-                    422, 'validation_error',
-                    'Another user is already registered using this email address.',
-                    {'fields': {'email': 'Already registered.'}})
+            existing = (not token and values['login']
+                        and Users.search(Users._get_login_domain(values['login']), limit=1))
+            if existing:
+                # Do not reveal that the address is already registered (the
+                # confirm/resend and password-reset endpoints are likewise
+                # non-enumerating). Answer exactly like a fresh b2c signup, and
+                # nudge a still-unconfirmed account towards confirming.
+                if not existing.odusite_email_confirmed and not existing._is_internal():
+                    try:
+                        existing._odusite_send_confirmation_email()
+                    except Exception:
+                        _logger.warning('Odusite confirmation resend failed', exc_info=True)
+                return {'status': 'confirmation_sent', 'email': values['login']}
             _logger.warning('Odusite signup failed: %s', exc)
             raise ApiError(400, 'bad_request', 'Could not create a new account.')
 
@@ -297,6 +309,7 @@ class OdusiteAuthController(http.Controller):
         Always answers ``{ok: true}`` regardless of whether the account exists
         or is already confirmed (no user enumeration).
         """
+        request.env['odusite.rate.limit']._enforce(scope='confirm_resend', limit=5, window=3600)
         if isinstance(email, str) and email.strip():
             value = email.strip()
             Users = request.env['res.users'].sudo().with_context(active_test=False)
@@ -315,6 +328,7 @@ class OdusiteAuthController(http.Controller):
     def auth_password_forgot(self, login=None, **params):
         if not isinstance(login, str) or not login.strip():
             raise ApiError(400, 'bad_request', 'login is required.')
+        request.env['odusite.rate.limit']._enforce(scope='password_forgot', limit=5, window=3600)
         if get_param('auth_signup.reset_password') != 'True':
             _logger.info('Odusite password reset requested but the feature is '
                          'disabled (auth_signup.reset_password).')
