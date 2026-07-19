@@ -66,9 +66,12 @@ const current = Astro.url.pathname;
     min-height: 60px;
   }
   .od-header__brand {
-    font-weight: 700;
+    font-family: var(--od-font-display);
+    font-weight: 400;
+    font-synthesis: none;
     color: var(--od-fg);
-    font-size: var(--od-text-lg);
+    font-size: var(--od-text-xl);
+    letter-spacing: -0.01em;
     display: flex;
     align-items: center;
   }

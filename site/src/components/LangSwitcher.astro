@@ -42,7 +42,7 @@ const localeHref = (urlCode: string) =>
     font-weight: 600;
     color: var(--od-fg-muted);
     padding: var(--od-space-1) var(--od-space-2);
-    border-radius: var(--od-radius-sm);
+    border-radius: var(--od-radius-s);
     user-select: none;
   }
   .od-lang > summary::-webkit-details-marker { display: none; }
@@ -56,19 +56,19 @@ const localeHref = (urlCode: string) =>
     margin: 0;
     padding: var(--od-space-1);
     list-style: none;
-    background: var(--od-bg-elevated, var(--od-bg));
+    background: var(--od-bg-raised);
     border: 1px solid var(--od-border);
-    border-radius: var(--od-radius-md);
-    box-shadow: var(--od-shadow-md, 0 8px 24px rgba(0, 0, 0, 0.4));
+    border-radius: var(--od-radius-m);
+    box-shadow: var(--od-shadow-m);
     z-index: 60;
   }
   .od-lang li a {
     display: block;
     padding: var(--od-space-2) var(--od-space-3);
-    border-radius: var(--od-radius-sm);
+    border-radius: var(--od-radius-s);
     font-size: var(--od-text-sm);
     color: var(--od-fg-muted);
   }
-  .od-lang li a:hover { background: var(--od-surface, rgba(255, 255, 255, 0.05)); color: var(--od-fg); }
+  .od-lang li a:hover { background: var(--od-bg-hover); color: var(--od-fg); }
   .od-lang li a.active { color: var(--od-accent); font-weight: 600; }
 </style>

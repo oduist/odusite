@@ -1,42 +1,46 @@
 /* Odusite theme "default" — design tokens (contract: specs/site/02-theming.md).
-   Every visual value used by components MUST come from these tokens. */
+   Every visual value used by components MUST come from these tokens.
+   World: warm-dark editorial — oxblood book-cloth on warm ink, terracotta ember.
+   Palette is OKLCH-designed and WCAG-AA verified (see DESIGN.md). Neutrals are
+   tinted toward the oxblood hue (~32deg), never toward blue and never true gray. */
 :root,
 [data-theme='dark'] {
   color-scheme: dark;
 
-  /* Surfaces */
-  --od-bg: #0b0e14;
-  --od-bg-raised: #11151f;
-  --od-bg-inset: #070a10;
-  --od-bg-hover: #171c29;
+  /* Surfaces — warm oxblood-black */
+  --od-bg: #17100e;
+  --od-bg-raised: #211613;
+  --od-bg-inset: #120b0a;
+  --od-bg-hover: #2a1c18;
 
-  /* Text */
-  --od-fg: #e6e9ef;
-  --od-fg-muted: #9aa3b5;
-  --od-fg-subtle: #6b7487;
+  /* Text — warm off-white (warmth lives here) */
+  --od-fg: #f2ece6;
+  --od-fg-muted: #b6a69c;
+  --od-fg-subtle: #8a7a70;
 
-  /* Accent */
-  --od-accent: #7c86ff;
-  --od-accent-hover: #949cff;
-  --od-accent-active: #6a73e8;
-  --od-accent-fg: #0b0e14;
-  --od-accent-soft: rgba(124, 134, 255, 0.14);
+  /* Accent — terracotta / clay ember (analogous to the oxblood surface) */
+  --od-accent: #d9744f;
+  --od-accent-hover: #e79070;
+  --od-accent-active: #c15f3d;
+  --od-accent-fg: #241612;
+  --od-accent-soft: rgba(217, 116, 79, 0.14);
 
-  /* Borders */
-  --od-border: #232838;
-  --od-border-strong: #333a4f;
+  /* Borders — self-colored warm edges */
+  --od-border: #33231e;
+  --od-border-strong: #45312a;
 
-  /* Semantic */
-  --od-success: #4ade80;
-  --od-warning: #fbbf24;
-  --od-danger: #f87171;
-  --od-info: #60a5fa;
-  --od-success-soft: rgba(74, 222, 128, 0.12);
-  --od-warning-soft: rgba(251, 191, 36, 0.12);
-  --od-danger-soft: rgba(248, 113, 113, 0.12);
-  --od-info-soft: rgba(96, 165, 250, 0.12);
+  /* Semantic — kept clear of the terracotta brand accent */
+  --od-success: #74be6e;
+  --od-warning: #e0b13a;
+  --od-danger: #e2564a;
+  --od-info: #5aa9d6;
+  --od-success-soft: rgba(116, 190, 110, 0.12);
+  --od-warning-soft: rgba(224, 177, 58, 0.12);
+  --od-danger-soft: rgba(226, 86, 74, 0.12);
+  --od-info-soft: rgba(90, 169, 214, 0.12);
 
   /* Typography */
+  --od-font-display: 'Gambarino', Georgia, 'Times New Roman', serif;
   --od-font-sans: ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --od-font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, Consolas, monospace;
   --od-text-xs: 0.75rem;
@@ -46,6 +50,7 @@
   --od-text-xl: 1.375rem;
   --od-text-2xl: 1.75rem;
   --od-text-3xl: 2.25rem;
+  --od-text-display: clamp(2.5rem, 6vw, 4.5rem);
   --od-leading: 1.6;
   --od-tracking-wide: 0.04em;
 
@@ -64,9 +69,11 @@
   --od-space-8: 56px;
   --od-space-9: 72px;
   --od-space-10: 96px;
-  --od-shadow-s: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --od-shadow-m: 0 4px 16px rgba(0, 0, 0, 0.45);
-  --od-shadow-l: 0 12px 40px rgba(0, 0, 0, 0.55);
+  /* Depth is carried by tone + self-colored edge; when a shadow is genuinely
+     needed it stays tight and warm-tinted (toward the inset), never a black bloom. */
+  --od-shadow-s: 0 1px 2px rgba(10, 6, 5, 0.5);
+  --od-shadow-m: 0 6px 20px rgba(10, 6, 5, 0.5);
+  --od-shadow-l: 0 16px 44px rgba(10, 6, 5, 0.55);
   --od-container: 1200px;
 
   /* Motion */
