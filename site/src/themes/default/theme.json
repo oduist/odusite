@@ -1,5 +1,5 @@
 {
   "name": "default",
-  "base": "dark",
-  "description": "Warm-dark editorial theme: oxblood book-cloth surfaces, warm off-white ink, a single terracotta ember accent, and a Gambarino display serif over a neutral system sans."
+  "base": "light",
+  "description": "Bright editorial theme: a crisp near-white paper, near-black ink, and one bold scarlet accent, with a Gambarino display serif over a neutral system sans. High-contrast and light."
 }
