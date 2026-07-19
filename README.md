@@ -1,10 +1,23 @@
 # 🚀 Odusite — Odoo as a Headless, AI-Native Website & Portal
 
-<p>
+<p align="center">
   <a href="https://odusite.oduflow.dev">
     <img src="https://img.shields.io/badge/%E2%96%B6%20Live%20Demo-odusite.oduflow.dev-e6003d?style=for-the-badge&labelColor=1a1a1a" alt="Live Demo — odusite.oduflow.dev">
   </a>
 </p>
+
+<table align="center">
+  <tr>
+    <td align="center">
+      <h3>🔴 Try the live demo</h3>
+      <a href="https://odusite.oduflow.dev"><b>odusite.oduflow.dev</b></a>
+      <br><br>
+      Sign in to the customer portal:
+      <br>
+      Email <b><code>demo@odusite</code></b> &nbsp;·&nbsp; Password <b><code>test</code></b>
+    </td>
+  </tr>
+</table>
 
 Odusite is a radical architectural shift for Odoo. It re-creates the entire
 public website and customer portal of **Odoo 19** as a decoupled, high-performance
