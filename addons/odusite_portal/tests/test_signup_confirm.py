@@ -24,7 +24,11 @@ class TestSignupConfirm(OdusiteHttpCase):
         cls.ICP = cls.env['ir.config_parameter'].sudo()
 
     def _enable_b2c(self):
-        self.ICP.set_param('auth_signup.invitation_scope', 'b2c')
+        # Keep flow tests independent of the process-wide config cache. The
+        # settings-to-parameter integration is covered by its dedicated test.
+        self.patch(
+            self.registry['res.users'], '_get_signup_invitation_scope',
+            lambda _users: 'b2c')
 
     def _find_user(self, login):
         Users = self.env['res.users'].sudo().with_context(active_test=False)

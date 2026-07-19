@@ -90,7 +90,7 @@ Astro.response.headers.set(TAGS_HEADER, `jobs,jobs:${job.id}`);
           </div>
 
           {turnstileSiteKey && (
-            <div class="cf-turnstile job-apply__turnstile" data-sitekey={turnstileSiteKey}></div>
+            <div id="job-apply-turnstile" class="cf-turnstile job-apply__turnstile" data-sitekey={turnstileSiteKey}></div>
           )}
 
           <p id="apply-error" class="job-apply__error" role="alert" hidden></p>
@@ -128,8 +128,8 @@ Astro.response.headers.set(TAGS_HEADER, `jobs,jobs:${job.id}`);
         errorBox.hidden = false;
       }
       // A consumed Turnstile token cannot be reused — reset for a retry.
-      const turnstile = (window as unknown as { turnstile?: { reset?: () => void } }).turnstile;
-      turnstile?.reset?.();
+      const turnstile = (window as unknown as { turnstile?: { reset?: (widget?: string) => void } }).turnstile;
+      turnstile?.reset?.('#job-apply-turnstile');
     };
 
     form.addEventListener('submit', async (event) => {
