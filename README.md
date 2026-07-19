@@ -4,6 +4,9 @@
   <a href="https://odusite.oduflow.dev">
     <img src="https://img.shields.io/badge/%E2%96%B6%20Live%20Demo-odusite.oduflow.dev-e6003d?style=for-the-badge&labelColor=1a1a1a" alt="Live Demo — odusite.oduflow.dev">
   </a>
+  <a href="https://oduist.github.io/odusite/">
+    <img src="https://img.shields.io/badge/%F0%9F%93%96%20Documentation-oduist.github.io%2Fodusite-1a1a1a?style=for-the-badge&labelColor=1a1a1a" alt="Documentation — oduist.github.io/odusite">
+  </a>
 </p>
 
 <table align="center">
