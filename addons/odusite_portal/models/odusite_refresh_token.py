@@ -72,6 +72,10 @@ class OdusiteRefreshToken(models.Model):
             return empty_user
         token_hash = self._hash_token(raw_token)
         now = fields.Datetime.now()
+        # The UPDATE below is raw SQL and bypasses the ORM cache; flush any
+        # pending writes on this model first (e.g. a prior _revoke or an expiry
+        # change) so the WHERE clause sees the current row state.
+        self.flush_model()
         self.env.cr.execute(
             """
             UPDATE odusite_refresh_token
