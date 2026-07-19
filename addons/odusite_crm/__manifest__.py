@@ -12,5 +12,8 @@ Odusite endpoints for website_crm:
     'author': 'Oduist OÜ',
     'license': 'Other OSI approved licence',
     'depends': ['odusite_base', 'website_crm'],
+    'data': [
+        'data/ir_config_parameter.xml',
+    ],
     'installable': True,
 }

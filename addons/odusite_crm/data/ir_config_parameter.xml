@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <!-- Default per-IP throttle for the public odusite_crm form endpoints
+         (/forms/contact, /forms/generic/*). Admins can tune these under
+         Settings > Technical > Parameters > System Parameters; noupdate keeps
+         their edits across module upgrades. The controller falls back to the
+         same values in code if a parameter is ever removed. -->
+    <record id="param_form_rate_limit" model="ir.config_parameter">
+        <field name="key">odusite.form_rate_limit</field>
+        <field name="value">20</field>
+    </record>
+    <record id="param_form_rate_window" model="ir.config_parameter">
+        <field name="key">odusite.form_rate_window</field>
+        <field name="value">3600</field>
+    </record>
+</odoo>

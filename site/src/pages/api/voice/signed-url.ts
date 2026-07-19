@@ -17,6 +17,14 @@ export const GET: APIRoute = async (ctx) => {
   if (!env.ELEVENLABS_API_KEY || !env.ELEVENLABS_AGENT_ID) {
     return json({ error: 'voice_not_configured' }, 503);
   }
+  // The broker is intentionally public (voice is for every visitor), but each
+  // signed URL spends ElevenLabs quota — cap requests per client IP. Degrades
+  // to no-limit only when the binding is absent (e.g. `astro dev`).
+  if (env.VOICE_RL) {
+    const ip = ctx.request.headers.get('CF-Connecting-IP') ?? 'anonymous';
+    const { success } = await env.VOICE_RL.limit({ key: ip });
+    if (!success) return json({ error: 'rate_limited' }, 429);
+  }
   const url = new URL('https://api.elevenlabs.io/v1/convai/conversation/get-signed-url');
   url.searchParams.set('agent_id', env.ELEVENLABS_AGENT_ID);
   try {

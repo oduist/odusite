@@ -8,7 +8,7 @@
 import type { APIRoute } from 'astro';
 import { apiFetch, OdusiteApiError } from '@lib/api/client';
 import { getEnv } from '@lib/env';
-import { verifyTurnstile } from '../lib/turnstile';
+import { enforceTurnstile } from '@lib/turnstile';
 import type { ContactMeta, ContactPayload } from '../types';
 
 export const prerender = false;
@@ -39,24 +39,15 @@ export const POST: APIRoute = async (context) => {
   const text = (key: string): string =>
     typeof body[key] === 'string' ? (body[key] as string).trim() : '';
 
-  // Anti-bot check comes first; only forward verified submissions.
-  if (env.TURNSTILE_SECRET_KEY) {
-    const token = typeof body['cf-turnstile-response'] === 'string'
-      ? (body['cf-turnstile-response'] as string)
-      : null;
-    const result = await verifyTurnstile(
-      env.TURNSTILE_SECRET_KEY,
-      token,
-      context.request.headers.get('CF-Connecting-IP'),
-    );
-    if (!result.ok) {
-      return jsonError(
-        403,
-        'turnstile_failed',
-        'Anti-bot verification failed. Please reload the page and try again.',
-      );
-    }
-  }
+  // Anti-bot check comes first; only forward verified submissions. Fails
+  // closed when the widget is configured but the secret is missing.
+  const turnstileBlocked = await enforceTurnstile(
+    env,
+    typeof body['cf-turnstile-response'] === 'string' ? (body['cf-turnstile-response'] as string) : null,
+    context.request.headers.get('CF-Connecting-IP'),
+    new URL(context.request.url).hostname,
+  );
+  if (turnstileBlocked) return turnstileBlocked;
 
   const name = text('name');
   const email = text('email');
