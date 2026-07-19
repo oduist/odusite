@@ -15,7 +15,7 @@ const image = imgUrl(product.image);
 const secondImage = imgUrl(product.second_image);
 ---
 
-<Card href={`/shop/${product.slug}`} padded={false} class="shop-card">
+<Card href={`/shop/${product.slug}`} padded={false} class="shop-card" voiceLabel={product.name}>
   <div class="shop-card__media">
     {image ? (
       <img src={image} alt={product.name} loading="lazy" width="400" height="400" />

@@ -27,7 +27,7 @@ const { post, forumSlug, lang = 'en' } = Astro.props;
   </div>
   <div class="post-row__main">
     <h3 class="post-row__title">
-      <a href={`/forum/${forumSlug}/${post.slug}`}>{post.name}</a>
+      <a href={`/forum/${forumSlug}/${post.slug}`} data-voice-label={post.name}>{post.name}</a>
     </h3>
     {post.tags.length > 0 && (
       <div class="post-row__tags">

@@ -14,7 +14,7 @@ const cover = imgUrl(course.cover);
 const duration = formatDuration(course.total_time);
 ---
 
-<Card href={`/courses/${course.slug}`} padded={false} class="course-card">
+<Card href={`/courses/${course.slug}`} padded={false} class="course-card" voiceLabel={course.name}>
   <div class="course-card__cover">
     {cover ? (
       <img src={cover} alt="" loading="lazy" />

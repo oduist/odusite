@@ -191,3 +191,36 @@ webhooks). Odoo addon manifests must use a `license` value Odoo accepts (Odoo's
 `ir.module.module.license` selection has no `MIT`; MIT-licensed addons declare
 `Other OSI approved licence`) or they fail to register on stricter `odoo:19.0`
 builds.
+
+## ADR-015 — Voice assistant: derive the agent from site config; open entities via on-page click
+Context: the ElevenLabs voice assistant (`specs/site/04-voice-assistant.md`)
+could `navigate` to fixed sections and `search_site`, but not open an individual
+entity (a product, post, event, …): those live in Odoo under dynamic slugs the
+agent does not know, and a per-entity backend resolver would mean N resolvers for
+N blocks. Separately the tool contracts were maintained twice (ElevenLabs
+dashboard + widget) and the prompt's section list drifted from the enabled
+blocks.
+Decision:
+- **Open entities by clicking what's rendered, not by resolving URLs.** Add a
+  third client tool `click_on_page(text)` that scans the current page for a
+  navigable entity and follows its link. Blocks mark canonical entity links with
+  `data-voice-label="<name>"` (primary); an in-`<main>` internal-link scan is the
+  fallback until every block is annotated. The agent opens a specific item with
+  the two-step pattern *navigate/search to a listing → click_on_page by name*.
+  Only same-origin `/…` links are ever followed.
+- **One source of truth for tools:** `site/src/voice/tools.mjs` — imported by the
+  widget (implements handlers) and by the provisioner (registers them). No
+  dashboard-vs-code drift.
+- **Derive the agent from the site, provision idempotently:** `pnpm voice:sync`
+  (`scripts/voice-sync.mjs`) builds the system prompt from the enabled blocks
+  (`src/voice/prompt.mjs`), creates any missing ElevenLabs tools, and PATCHes the
+  agent's `prompt` + `tool_ids`. `--dry-run` shows the diff. The ElevenLabs
+  dashboard keeps ownership of voice/LLM/persona; the repo owns prompt + tools.
+Consequences: one universal mechanism covers every block instead of per-entity
+endpoints; adding a new entity type is just a `data-voice-label` on its link; the
+agent config is re-creatable from the repo and stays in step with which blocks a
+deployment ships. `click_on_page` only reaches entities present on the current
+page (by design — hence the two-step pattern), and the provisioner needs
+`ELEVENLABS_API_KEY` wherever it runs (CI or an operator's shell). ElevenLabs
+Convai API payload shapes are isolated in one place in the script for easy
+updates if the upstream API changes.

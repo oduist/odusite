@@ -13,7 +13,7 @@ const cover = imgUrl(post.cover);
 const avatar = imgUrl(post.author?.avatar);
 ---
 
-<Card href={`/blog/${post.slug}`} padded={false}>
+<Card href={`/blog/${post.slug}`} padded={false} voiceLabel={post.name}>
   {cover ? (
     <img class="post-card__cover" src={cover} alt="" loading="lazy" decoding="async" />
   ) : (

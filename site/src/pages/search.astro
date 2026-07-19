@@ -145,7 +145,7 @@ for (const item of results) {
                 <img class="search-result__img" src={imgUrl(item.image)} alt="" loading="lazy" width="48" height="48" />
               )}
               <div>
-                <a class="search-result__link" href={siteUrl(item)}>{item.name}</a>
+                <a class="search-result__link" href={siteUrl(item)} data-voice-label={item.name}>{item.name}</a>
                 {item.description && <p class="search-result__desc">{item.description}</p>}
               </div>
             </li>

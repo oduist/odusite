@@ -162,7 +162,7 @@ Astro.response.headers.set(TAGS_HEADER, 'partners');
               const location = [partner.city, partner.country].filter(Boolean).join(', ');
               return (
                 <li>
-                  <Card href={`/partners/${partner.slug}`} padded={true}>
+                  <Card href={`/partners/${partner.slug}`} padded={true} voiceLabel={partner.name}>
                     <div class="partner-card">
                       <div class="partner-card__logo">
                         {logo ? (
