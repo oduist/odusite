@@ -53,6 +53,8 @@ class OdusiteMassMailingController(http.Controller):
         if self._honeypot_triggered(kwargs):
             # Silent success: bots must not learn they were detected.
             return {'subscribed': True}
+        # Per-IP throttle (defense in depth behind the site-side Turnstile).
+        request.env['odusite.rate.limit']._enforce(scope='newsletter', limit=10, window=3600)
         email = str(kwargs.get('email') or '').strip()
         if not email_normalize(email):
             raise ApiError(422, 'validation_error', 'Invalid email address.',

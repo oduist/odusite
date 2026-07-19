@@ -1,6 +1,3 @@
-import json
-import time
-
 from odoo import http
 from odoo.http import request
 from odoo.tools import email_normalize, escape_psql
@@ -9,7 +6,6 @@ from odoo.tools.mail import plaintext2html
 from odoo.addons.odusite_base.controllers.api import API_PREFIX, ApiError, odusite_route
 
 HONEYPOT_FIELD = 'website_hp'
-THROTTLE_PARAM = 'odusite.form_throttle'
 THROTTLE_DEFAULT_LIMIT = 20
 THROTTLE_DEFAULT_WINDOW = 3600
 
@@ -19,34 +15,17 @@ class OdusiteCrmController(http.Controller):
     def _honeypot_triggered(self, kwargs):
         return bool(str(kwargs.get(HONEYPOT_FIELD) or '').strip())
 
-    def _check_rate_limit(self):
+    def _check_rate_limit(self, scope='contact'):
         """Per-IP submission throttle, defense in depth behind the site-side
-        Turnstile check. Counters live in a single ir.config_parameter as
-        {ip: [window_start, count]}; expired windows are pruned on the fly."""
+        Turnstile check. Delegates to the race-safe ``odusite.rate.limit`` model
+        (atomic counter keyed on the real Cloudflare client IP)."""
         icp = request.env['ir.config_parameter'].sudo()
         try:
             limit = int(icp.get_param('odusite.form_rate_limit', THROTTLE_DEFAULT_LIMIT))
             window = int(icp.get_param('odusite.form_rate_window', THROTTLE_DEFAULT_WINDOW))
         except (TypeError, ValueError):
             limit, window = THROTTLE_DEFAULT_LIMIT, THROTTLE_DEFAULT_WINDOW
-        if limit <= 0:
-            return
-        ip = request.httprequest.remote_addr or 'unknown'
-        now = int(time.time())
-        try:
-            counters = json.loads(icp.get_param(THROTTLE_PARAM) or '{}')
-        except ValueError:
-            counters = {}
-        counters = {
-            key: value for key, value in counters.items()
-            if isinstance(value, list) and len(value) == 2 and value[0] > now - window
-        }
-        start, count = counters.get(ip, (now, 0))
-        if count >= limit:
-            raise ApiError(429, 'too_many_requests',
-                           'Too many form submissions, please retry later.')
-        counters[ip] = [start, count + 1]
-        icp.set_param(THROTTLE_PARAM, json.dumps(counters))
+        request.env['odusite.rate.limit']._enforce(scope=scope, limit=limit, window=window)
 
     def _get_or_create_utm(self, model, name):
         name = str(name or '').strip()
@@ -120,7 +99,7 @@ class OdusiteCrmController(http.Controller):
         where hook(record, values) post-processes the created record."""
         if self._honeypot_triggered(kwargs):
             return {'id': 0}
-        self._check_rate_limit()
+        self._check_rate_limit(scope='form_generic')
         form_spec = request.env['odusite.api']._form_models().get(model)
         if not form_spec:
             raise ApiError(404, 'not_found', 'Unknown form model.')

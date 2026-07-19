@@ -2,6 +2,8 @@
 // Free tickets only in v1; paid tickets surface 409 payment_required.
 import type { APIRoute } from 'astro';
 import { apiFetch, OdusiteApiError } from '@lib/api/client';
+import { getEnv } from '@lib/env';
+import { enforceTurnstile } from '@lib/turnstile';
 import type { RegistrationAttendee, RegistrationTicket } from '../types';
 
 export const prerender = false;
@@ -20,6 +22,16 @@ function badRequest(message: string): Response {
 export const POST: APIRoute = async (context) => {
   const raw = (await context.request.json().catch(() => null)) as Record<string, unknown> | null;
   if (!raw) return badRequest('Invalid JSON body');
+
+  // Anti-bot check comes first; fails closed when the widget is configured but
+  // the secret is missing. Guards against registration/email-bombing.
+  const turnstileBlocked = await enforceTurnstile(
+    getEnv(context),
+    typeof raw['cf-turnstile-response'] === 'string' ? (raw['cf-turnstile-response'] as string) : null,
+    context.request.headers.get('CF-Connecting-IP'),
+    new URL(context.request.url).hostname,
+  );
+  if (turnstileBlocked) return turnstileBlocked;
 
   const eventId = Number(raw.event_id);
   if (!Number.isInteger(eventId) || eventId <= 0) return badRequest('Missing event_id');

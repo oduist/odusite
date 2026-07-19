@@ -1,11 +1,12 @@
 // Same-origin endpoint for the footer newsletter form.
 //
 // Receives {email, list_id?, website_hp?} JSON from the browser and forwards
-// it to Odoo via apiFetch. No Turnstile here: this low-risk form relies on the
-// honeypot field only (passed through — Odoo answers a silent success and
-// creates nothing when it is filled).
+// it to Odoo via apiFetch. Anti-abuse: the honeypot field (passed through —
+// Odoo silently drops non-empty values) plus Turnstile when configured.
 import type { APIRoute } from 'astro';
 import { apiFetch, OdusiteApiError } from '@lib/api/client';
+import { getEnv } from '@lib/env';
+import { enforceTurnstile } from '@lib/turnstile';
 
 export const prerender = false;
 
@@ -27,6 +28,16 @@ export const POST: APIRoute = async (context) => {
   } catch {
     return jsonError(400, 'bad_request', 'Expected a JSON body.');
   }
+
+  // Anti-bot check comes first; fails closed when the widget is configured but
+  // the secret is missing.
+  const turnstileBlocked = await enforceTurnstile(
+    getEnv(context),
+    typeof body['cf-turnstile-response'] === 'string' ? (body['cf-turnstile-response'] as string) : null,
+    context.request.headers.get('CF-Connecting-IP'),
+    new URL(context.request.url).hostname,
+  );
+  if (turnstileBlocked) return turnstileBlocked;
 
   const text = (key: string): string =>
     typeof body[key] === 'string' ? (body[key] as string).trim() : '';

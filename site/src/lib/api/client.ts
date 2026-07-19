@@ -60,6 +60,10 @@ export async function apiFetch<T = unknown>(
     'Content-Type': 'application/json',
     ...odooAccessHeaders(env),
   };
+  // Forward the real client IP so Odoo's per-IP throttle keys on the visitor,
+  // not on this Worker. Trusted because the whole API is gated by the token.
+  const clientIp = (ctx as { request?: Request }).request?.headers.get('CF-Connecting-IP');
+  if (clientIp) headers['CF-Connecting-IP'] = clientIp;
   if (options.auth !== false) {
     const token = getAccessToken(ctx);
     if (token) headers['Authorization'] = `Bearer ${token}`;

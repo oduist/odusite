@@ -57,6 +57,12 @@ class OdusiteRefreshToken(models.Model):
     def _consume(self, raw_token):
         """Validate `raw_token` and revoke it (rotation).
 
+        The claim is a single atomic UPDATE (``... WHERE revoked = false ...
+        RETURNING``) so two concurrent refreshes with the same token cannot both
+        succeed — exactly one wins the rotation (closing the previous
+        check-then-write race). A miss (unknown / already rotated / expired)
+        returns an empty recordset, as before.
+
         :return: the owning res.users record (sudo), or an empty recordset
                  when the token is unknown, revoked, expired or the user is
                  inactive.
@@ -64,15 +70,24 @@ class OdusiteRefreshToken(models.Model):
         empty_user = self.env['res.users'].sudo().browse()
         if not raw_token or not isinstance(raw_token, str):
             return empty_user
-        token = self.sudo().search(
-            [('token_hash', '=', self._hash_token(raw_token))], limit=1)
-        if not token or token.revoked or token.expires_at < fields.Datetime.now():
+        token_hash = self._hash_token(raw_token)
+        now = fields.Datetime.now()
+        self.env.cr.execute(
+            """
+            UPDATE odusite_refresh_token
+               SET revoked = true, last_used_at = %s
+             WHERE token_hash = %s AND revoked = false AND expires_at >= %s
+            RETURNING user_id
+            """,
+            (now, token_hash, now),
+        )
+        row = self.env.cr.fetchone()
+        if not row:
             return empty_user
-        token.write({'revoked': True, 'last_used_at': fields.Datetime.now()})
-        user = token.user_id
-        if not user.active:
-            return empty_user
-        return user
+        # The raw UPDATE bypassed the ORM cache; drop it before reading back.
+        self.invalidate_model(['revoked', 'last_used_at'])
+        user = self.env['res.users'].sudo().browse(row[0])
+        return user if user.active else empty_user
 
     @api.model
     def _revoke(self, raw_token):
