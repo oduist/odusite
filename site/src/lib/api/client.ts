@@ -61,9 +61,10 @@ export async function apiFetch<T = unknown>(
     ...odooAccessHeaders(env),
   };
   // Forward the real client IP so Odoo's per-IP throttle keys on the visitor,
-  // not on this Worker. Trusted because the whole API is gated by the token.
+  // not on this Worker. A custom header survives cross-zone Worker requests;
+  // Cloudflare replaces CF-Connecting-IP in that case.
   const clientIp = (ctx as { request?: Request }).request?.headers.get('CF-Connecting-IP');
-  if (clientIp) headers['CF-Connecting-IP'] = clientIp;
+  if (clientIp) headers['X-Odusite-Client-IP'] = clientIp;
   if (options.auth !== false) {
     const token = getAccessToken(ctx);
     if (token) headers['Authorization'] = `Bearer ${token}`;

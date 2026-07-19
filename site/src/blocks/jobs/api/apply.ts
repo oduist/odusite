@@ -94,7 +94,7 @@ export const POST: APIRoute = async (context) => {
 
   const applyHeaders: Record<string, string> = { 'X-Odusite-Token': env.ODUSITE_TOKEN };
   const clientIp = context.request.headers.get('CF-Connecting-IP');
-  if (clientIp) applyHeaders['CF-Connecting-IP'] = clientIp;
+  if (clientIp) applyHeaders['X-Odusite-Client-IP'] = clientIp;
 
   const response = await fetch(url, {
     method: 'POST',

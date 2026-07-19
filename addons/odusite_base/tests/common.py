@@ -74,6 +74,14 @@ class OdusiteHttpCase(HttpCase):
         self.assertTrue(body and 'error' in body, f'expected error body, got: {body}')
         self.assertEqual(body['error']['code'], code)
 
+    def clear_rate_limit(self, key):
+        self.env['odusite.rate.limit'].sudo().search([('key', '=', key)]).unlink()
+
+    def rate_limit_hits(self, key):
+        row = self.env['odusite.rate.limit'].sudo().search(
+            [('key', '=', key)], limit=1)
+        return row.hits if row else None
+
     # -- Auth helpers ----------------------------------------------------
 
     @classmethod

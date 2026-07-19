@@ -83,20 +83,26 @@ class TestContactForm(OdusiteHttpCase):
 
     def test_contact_rate_limit(self):
         icp = self.env['ir.config_parameter'].sudo()
+        client_ip = '198.51.100.20'
+        limiter_key = f'contact:{client_ip}'
+        headers = {'X-Odusite-Client-IP': client_ip}
         # Enforcement is skipped under the test runner by default (counters
         # accumulate across unrelated cases); this test opts in explicitly.
         icp.set_param('odusite.rate_limit_force_in_tests', '1')
         icp.set_param('odusite.form_rate_limit', '1')
-        self.env['odusite.rate.limit'].sudo().search([]).unlink()
+        self.clear_rate_limit(limiter_key)
         try:
-            response, body = self.api('POST', '/forms/contact', VALID_PAYLOAD)
+            response, body = self.api(
+                'POST', '/forms/contact', VALID_PAYLOAD, headers=headers)
             self.assertEqual(response.status_code, 200, body)
-            response, body = self.api('POST', '/forms/contact', VALID_PAYLOAD)
+            self.assertEqual(self.rate_limit_hits(limiter_key), 1)
+            response, body = self.api(
+                'POST', '/forms/contact', VALID_PAYLOAD, headers=headers)
             self.assert_api_error(response, body, 429, 'too_many_requests')
         finally:
             icp.set_param('odusite.rate_limit_force_in_tests', False)
             icp.set_param('odusite.form_rate_limit', False)
-            self.env['odusite.rate.limit'].sudo().search([]).unlink()
+            self.clear_rate_limit(limiter_key)
 
     def test_generic_form_unknown_model(self):
         # res.users is never in the odusite.api form whitelist. (The full

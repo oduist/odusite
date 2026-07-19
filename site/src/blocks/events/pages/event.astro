@@ -161,7 +161,7 @@ const Tickets = canRegister ? 'form' : 'div';
               <>
                 <div class="attendees" id="attendees"></div>
                 {turnstileSiteKey && (
-                  <div class="cf-turnstile event-register__turnstile" data-sitekey={turnstileSiteKey}></div>
+                  <div id="event-register-turnstile" class="cf-turnstile event-register__turnstile" data-sitekey={turnstileSiteKey}></div>
                 )}
                 <p class="register-msg" id="register-msg" role="alert" hidden></p>
                 <Button type="submit" class="register-submit">Register</Button>
@@ -319,7 +319,8 @@ const Tickets = canRegister ? 'form' : 'div';
       } finally {
         if (submit) submit.disabled = false;
         // A consumed Turnstile token cannot be reused — reset for a retry.
-        (window as unknown as { turnstile?: { reset?: () => void } }).turnstile?.reset?.();
+        (window as unknown as { turnstile?: { reset?: (widget?: string) => void } })
+          .turnstile?.reset?.('#event-register-turnstile');
       }
     });
   }

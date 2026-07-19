@@ -38,7 +38,7 @@ const turnstileSiteKey = getEnv(Astro).PUBLIC_TURNSTILE_SITE_KEY;
     />
   </div>
   {turnstileSiteKey && (
-    <div class="cf-turnstile od-newsletter__turnstile" data-sitekey={turnstileSiteKey}></div>
+    <div id="newsletter-turnstile" class="cf-turnstile od-newsletter__turnstile" data-sitekey={turnstileSiteKey}></div>
   )}
   <p class="od-newsletter__msg" role="status" hidden></p>
 </form>
@@ -85,7 +85,8 @@ const turnstileSiteKey = getEnv(Astro).PUBLIC_TURNSTILE_SITE_KEY;
       } finally {
         if (button) button.disabled = false;
         // A consumed Turnstile token cannot be reused — reset for a retry.
-        (window as unknown as { turnstile?: { reset?: () => void } }).turnstile?.reset?.();
+        (window as unknown as { turnstile?: { reset?: (widget?: string) => void } })
+          .turnstile?.reset?.('#newsletter-turnstile');
       }
     });
   }
