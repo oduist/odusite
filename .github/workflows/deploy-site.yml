@@ -41,7 +41,7 @@ jobs:
           cache: pnpm
           cache-dependency-path: site/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      - name: Build (demo: all blocks enabled)
+      - name: 'Build (demo: all blocks enabled)'
         run: ODUSITE_BLOCK_FORUM=1 ODUSITE_BLOCK_COURSES=1 pnpm build
       - name: Deploy to Cloudflare Workers
         run: pnpm exec wrangler deploy
