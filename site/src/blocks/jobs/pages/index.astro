@@ -151,7 +151,7 @@ Astro.response.headers.set(TAGS_HEADER, 'jobs');
                 .join(', ');
               return (
                 <li>
-                  <Card href={`/jobs/${job.slug}`} padded={true}>
+                  <Card href={`/jobs/${job.slug}`} padded={true} voiceLabel={job.name}>
                     <div class="job-card">
                       <div class="job-card__main">
                         <h3 class="job-card__title">{job.name}</h3>

@@ -6,6 +6,10 @@ name: Deploy site
 # `wrangler secret put` and persist across deploys, so this workflow only needs
 # the Cloudflare API credentials. Vars (ODOO_URL, PUBLIC_SITE_URL) and the KV
 # binding live in site/wrangler.jsonc.
+#
+# Optional: if the ELEVENLABS_API_KEY / ELEVENLABS_AGENT_ID repo secrets are set,
+# the final step provisions the voice assistant's ElevenLabs agent (prompt +
+# client tools) from the site config. When they are absent it is a clean no-op.
 
 on:
   push:
@@ -44,3 +48,12 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      # Provision the ElevenLabs voice agent from the site config. No-ops when
+      # the ElevenLabs secrets are unset. Uses the same block overrides as the
+      # build so the agent's prompt matches what was just deployed.
+      - name: Sync voice assistant agent
+        run: ODUSITE_BLOCK_FORUM=1 ODUSITE_BLOCK_COURSES=1 pnpm voice:sync --skip-if-unconfigured
+        env:
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          ELEVENLABS_AGENT_ID: ${{ secrets.ELEVENLABS_AGENT_ID }}
+          ODUSITE_SITE_NAME: ${{ vars.ODUSITE_SITE_NAME }}

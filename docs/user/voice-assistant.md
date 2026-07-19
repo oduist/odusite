@@ -10,6 +10,10 @@ take you where you want to go ("show me office chairs", "open my orders",
 - While connected the button pulses and shows *Listening…* / *Speaking…*.
 - The assistant can move you around the site as you talk — the conversation keeps
   going while the page changes.
+- It can also open a **specific** item — a product, article, event, job or forum
+  thread — when you name it ("open the ergonomic desk chair"). It may bring up a
+  short list first and then open the one you mean; if several things match, it
+  will ask which one.
 - Tap the button again to end the conversation.
 
 Your voice is streamed to the assistant only while a conversation is active.

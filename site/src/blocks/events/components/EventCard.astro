@@ -14,7 +14,7 @@ const parts = eventDateParts(event.date_begin, event.timezone);
 const location = [event.address?.city, event.address?.country].filter(Boolean).join(', ');
 ---
 
-<Card href={`/events/${event.slug}`} padded={false}>
+<Card href={`/events/${event.slug}`} padded={false} voiceLabel={event.name}>
   {cover && <img class="event-card__cover" src={cover} alt="" loading="lazy" decoding="async" />}
   <div class="event-card__body">
     <div class="event-card__date" aria-hidden="true">

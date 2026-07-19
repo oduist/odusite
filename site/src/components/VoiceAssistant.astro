@@ -40,6 +40,7 @@
 
 <script>
   import { navigate } from 'astro:transitions/client';
+  import { VOICE_TOOL_NAMES } from '../voice/tools.mjs';
 
   // The live conversation is kept on window so it survives both View Transitions
   // (the widget is transition:persist) and any re-run of this module script.
@@ -99,6 +100,67 @@
     if (document.visibilityState === 'visible' && window.__odVoiceConv) resumeAudio();
   });
 
+  // --- Open-by-name on the current page -----------------------------------
+  // click_on_page lets the agent open a specific visible entity (product, post,
+  // event, forum thread…) without knowing its URL. Blocks mark their canonical
+  // entity links with `data-voice-label="<visible name>"`; we scan those inside
+  // <main>, fuzzy-match the spoken phrase, and SPA-navigate to the one link.
+  // Until a block is annotated we fall back to internal links inside <main>.
+  type VoiceTarget = { label: string; href: string | null; el: Element; norm: string };
+
+  function normalizeLabel(s: string): string {
+    return s
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '') // strip diacritics
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}]+/gu, ' ') // punctuation → space
+      .trim()
+      .replace(/\s+/g, ' ');
+  }
+
+  // Same-origin internal path only — never external URLs or javascript: links.
+  function internalHref(el: Element): string | null {
+    const a = el.matches('a[href]') ? el : el.closest('a[href]');
+    const href = a?.getAttribute('href') ?? null;
+    return href && href.startsWith('/') ? href : null;
+  }
+
+  function collectTargets(): VoiceTarget[] {
+    const scope = document.querySelector('main') ?? document.body;
+    const out: VoiceTarget[] = [];
+    const seen = new Set<string>();
+    const push = (rawLabel: string, href: string | null, el: Element) => {
+      const label = rawLabel.trim().replace(/\s+/g, ' ');
+      if (!label) return;
+      const key = `${label}\u0000${href ?? ''}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({ label, href, el, norm: normalizeLabel(label) });
+    };
+    // Primary: explicitly annotated entity links.
+    scope.querySelectorAll('[data-voice-label]').forEach((el) => {
+      push(el.getAttribute('data-voice-label') ?? el.textContent ?? '', internalHref(el), el);
+    });
+    // Fallback until every block is annotated: internal links inside main.
+    if (out.length === 0) {
+      scope.querySelectorAll('a[href^="/"]').forEach((a) => {
+        const text = (a.getAttribute('aria-label') || a.textContent || '').trim();
+        if (text.length >= 2) push(text, a.getAttribute('href'), a);
+      });
+    }
+    return out;
+  }
+
+  // Tiered match: exact → edge (prefix either way) → substring. Speech rarely
+  // equals the label verbatim, so we widen only when a tighter tier is empty.
+  function matchTargets(cands: VoiceTarget[], q: string): VoiceTarget[] {
+    const exact = cands.filter((c) => c.norm === q);
+    if (exact.length) return exact;
+    const edge = cands.filter((c) => c.norm.startsWith(q) || q.startsWith(c.norm));
+    if (edge.length) return edge;
+    return cands.filter((c) => c.norm.includes(q) || q.includes(c.norm));
+  }
+
   // The ElevenLabs SDK appends its <audio> output sink to document.body. Astro
   // View Transitions replace <body> on navigation (including the agent's own
   // navigate() tool), which removes that sink — the socket and mic keep going
@@ -148,7 +210,40 @@
         await navigate(`/search?q=${encodeURIComponent(q)}`);
         return `Showing results for ${q}.`;
       },
+      click_on_page: async ({ text }: { text?: string }) => {
+        const q = normalizeLabel(String(text ?? ''));
+        if (!q) return 'No item name was given.';
+        const targets = collectTargets();
+        if (!targets.length) {
+          return 'There is nothing to open on this page. Navigate to a section or search first.';
+        }
+        const matches = matchTargets(targets, q);
+        if (matches.length === 0) {
+          const sample = targets.slice(0, 8).map((t) => t.label).join('; ');
+          return `Couldn't find "${text}" on this page. Visible items include: ${sample}.`;
+        }
+        if (matches.length > 1) {
+          const labels = matches.slice(0, 6).map((m) => m.label).join('; ');
+          return `Several items match "${text}": ${labels}. Which one?`;
+        }
+        const target = matches[0];
+        if (target.href) {
+          await navigate(target.href);
+        } else {
+          (target.el as HTMLElement).click();
+        }
+        return `Opened ${target.label}.`;
+      },
     };
+
+    // Drift guard: every tool declared for the agent must have a handler here.
+    if (import.meta.env.DEV) {
+      for (const name of VOICE_TOOL_NAMES) {
+        if (!(name in clientTools)) {
+          console.warn(`[voice] declared tool "${name}" has no client handler`);
+        }
+      }
+    }
 
     btn.addEventListener('click', async () => {
       // Any click is a user gesture — a good moment to wake sleeping audio.

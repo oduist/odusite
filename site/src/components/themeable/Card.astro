@@ -3,12 +3,20 @@ interface Props {
   href?: string;
   padded?: boolean;
   class?: string;
+  // Marks this card as a canonical entity link for the voice assistant, which
+  // opens it by this visible name via the click_on_page tool. See
+  // specs/site/04-voice-assistant.md.
+  voiceLabel?: string;
 }
-const { href, padded = true, class: className = '' } = Astro.props;
+const { href, padded = true, class: className = '', voiceLabel } = Astro.props;
 const Tag = href ? 'a' : 'div';
 ---
 
-<Tag class:list={['od-card', { 'od-card--padded': padded, 'od-card--link': !!href }, className]} href={href}>
+<Tag
+  class:list={['od-card', { 'od-card--padded': padded, 'od-card--link': !!href }, className]}
+  href={href}
+  data-voice-label={href ? voiceLabel : undefined}
+>
   <slot />
 </Tag>
 
