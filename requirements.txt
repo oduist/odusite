@@ -1,0 +1,3 @@
+# Python dependencies for the odusite_* Odoo addons.
+# boto3: S3-compatible object storage client used by odusite_s3.
+boto3
